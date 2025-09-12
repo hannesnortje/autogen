@@ -31,3 +31,24 @@ def test_memory_summarize_creates_summary(monkeypatch):
         p for p in points if p["payload"].get("scope") == "thread_summary"
     ]
     assert summary_points, "Expected a thread_summary event to be written"
+
+
+def test_memory_blocks_secret_storage():
+    svc = MemoryService(collection="mem_block_secret", summary_threshold=3)
+    svc.ensure_collection()
+    # Should raise ValueError for secret in text
+    try:
+        svc.write_event(
+            "thread", thread_id="t3", text="api_key=sk-1234567890abcdef1234567890abcdef"
+        )
+        assert False, "Expected ValueError for secret in text"
+    except ValueError as e:
+        assert "blocked by policy" in str(e)
+    # Should raise ValueError for secret in metadata
+    try:
+        svc.write_event(
+            "thread", thread_id="t3", text="no secret", metadata={"token": "mytoken123"}
+        )
+        assert False, "Expected ValueError for secret in metadata"
+    except ValueError as e:
+        assert "blocked by policy" in str(e)

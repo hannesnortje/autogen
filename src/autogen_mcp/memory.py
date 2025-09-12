@@ -49,11 +49,52 @@ class MemoryConfig:
         text: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
+        from autogen_mcp.observability import redact_secrets
+        import re
+
+        # Secret patterns to block
+        secret_patterns = [
+            r"(?i)api[_-]?key[\s:=]+[\w-]+",
+            r"(?i)token[\s:=]+[\w-]+",
+            r"(?i)password[\s:=]+[\w-]+",
+            r"sk-[A-Za-z0-9]{32,}",
+        ]
+
+        sensitive_keys = {"token", "api_key", "apikey", "password", "secret"}
+
+        def contains_secret(val):
+            if isinstance(val, dict):
+                # Block if any key is sensitive, or any value contains a secret
+                for k, v in val.items():
+                    if isinstance(k, str) and k.lower() in sensitive_keys:
+                        return True
+                    if contains_secret(v):
+                        return True
+                return False
+            if isinstance(val, list):
+                return any(contains_secret(v) for v in val)
+            if isinstance(val, str):
+                return any(re.search(pat, val) for pat in secret_patterns)
+            return False
+
+        if contains_secret(text) or contains_secret(metadata or {}):
+            self.logger.warning(
+                "Blocked attempt to store secret in memory",
+                extra={
+                    "extra": {
+                        "scope": scope,
+                        "thread_id": thread_id,
+                        "event": "blocked_secret_storage",
+                    }
+                },
+            )
+            raise ValueError("Attempted to store secret in memory; blocked by policy.")
+
         payload = {
             "scope": scope,
             "thread_id": thread_id,
-            "text": text,
-            "metadata": metadata or {},
+            "text": redact_secrets(text),
+            "metadata": redact_secrets(metadata or {}),
             "ts": time.time(),
         }
         pid = str(uuid.uuid4())

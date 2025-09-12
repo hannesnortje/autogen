@@ -42,6 +42,25 @@ def test_get_logger_and_correlation_id(monkeypatch):
     assert any("Debug" in line for line in logs)
 
 
+def test_secret_redaction_in_logs():
+    logger = get_logger("autogen.redact", correlation_id="cid-redact", verbosity="INFO")
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setFormatter(JsonFormatter())
+    logger.handlers = [handler]
+    # Log a message with secrets
+    secret_text = "api_key=sk-1234567890abcdef1234567890abcdef token: mytoken123 password=supersecret"
+    logger.info(secret_text, extra={"extra": {"payload": secret_text}})
+    logs = buf.getvalue().splitlines()
+    for line in logs:
+        # No secret values should appear in the log
+        assert "sk-1234567890abcdef1234567890abcdef" not in line
+        assert "mytoken123" not in line
+        assert "supersecret" not in line
+        # Redacted marker should appear
+        assert "[REDACTED]" in line
+
+
 def test_logger_env_verbosity(monkeypatch):
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
     logger = get_logger("autogen.testenv")

@@ -204,19 +204,19 @@ Artifacts:
 
 ## Step 11 — Security and data hygiene
 - Branch: `feature/11-security`
-- Scope:
-  - [ ] Secret redaction in logs and memory
-  - [ ] Outbound call/domain allowlist
-  - [ ] Payload filters block secrets storage
-- Acceptance:
-  - [ ] Secrets never stored/logged; violations blocked with warnings
-  - [ ] Allowlist enforced for tools
-- Tests:
-  - [ ] Unit: redaction and filters
-  - [ ] Integration: attempt secret write → blocked
-  - [ ] E2E: disallowed outbound call → policy error
-- Artifacts:
-  - [ ] ADR-010: Security posture
+Scope:
+  [x] Secret redaction in logs and memory
+  [x] Outbound call/domain allowlist
+  [x] Payload filters block secrets storage
+Acceptance:
+  [x] Secrets never stored/logged; violations blocked with warnings
+  [x] Allowlist enforced for tools
+Tests:
+  [x] Unit: redaction and filters
+  [x] Integration: attempt secret write → blocked
+  [x] E2E: disallowed outbound call → policy error
+Artifacts:
+  [ ] ADR-010: Security posture
 
 ## Step 12 — CI/CD pipelines and schedules
 - Branch: `feature/12-ci`
@@ -272,4 +272,5 @@ Artifacts:
 - 2024-06-08: Step 7 (AutoGen agents scaffolding, Gemini integration, CLI) completed and merged from 'feature/07-agents-gemini-integration'.
 - 2025-09-12: Step 8 (VS Code MCP server integration) completed and merged from 'feature/08-mcp-server'.
 - 2025-09-12: Step 9 (Git workflow automation, PR/commit/CI artifact linkage) completed and merged from 'feature/09-git-workflow'.
-2025-09-12: Step 10 (Observability and tracing: structured logging, correlation IDs, verbosity, logger adapters, session log inspection) completed and merged from 'feature/10-observability'.
+
+2025-09-12: Step 11 (Security and data hygiene: secret redaction in logs/memory, outbound call/domain allowlist, payload filters for secrets, unit/integration/E2E tests) completed and merged from 'feature/11-security'.

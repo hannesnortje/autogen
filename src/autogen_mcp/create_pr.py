@@ -16,7 +16,11 @@ def create_github_pr(
     logger=None,
     correlation_id=None,
 ):
+    from autogen_mcp.security import is_url_allowed
+
     url = f"https://api.github.com/repos/{repo}/pulls"
+    if not is_url_allowed(url):
+        raise RuntimeError(f"Outbound call to disallowed domain: {url}")
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",

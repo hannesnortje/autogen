@@ -29,7 +29,12 @@ class QdrantWrapper:
             self.session.headers.update({"api-key": self.config.api_key})
 
     def _url(self, path: str) -> str:
-        return f"{self.config.url.rstrip('/')}{path}"
+        from autogen_mcp.security import is_url_allowed
+
+        url = f"{self.config.url.rstrip('/')}{path}"
+        if not is_url_allowed(url):
+            raise RuntimeError(f"Outbound call to disallowed domain: {url}")
+        return url
 
     def health(self) -> bool:
         try:

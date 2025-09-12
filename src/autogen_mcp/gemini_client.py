@@ -17,6 +17,10 @@ class GeminiClient:
             raise RuntimeError("GEMINI_API_KEY not set in environment or provided.")
 
     def complete(self, prompt: str, **kwargs) -> str:
+        from autogen_mcp.security import is_url_allowed
+
+        if not is_url_allowed(GEMINI_API_URL):
+            raise RuntimeError(f"Outbound call to disallowed domain: {GEMINI_API_URL}")
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": self.api_key,
