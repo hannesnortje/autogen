@@ -1,4 +1,6 @@
 import os
+import asyncio
+from datetime import datetime, timezone
 import uuid
 import json
 from pathlib import Path
@@ -88,6 +90,19 @@ class OrchestrateResponse(BaseModel):
     status: str
 
 
+class SessionInfo(BaseModel):
+    session_id: str
+    project: str
+    objective: str
+    status: str
+    agents: list[str]
+    created_at: str
+
+
+class SessionsResponse(BaseModel):
+    sessions: list[SessionInfo]
+
+
 @app.post("/orchestrate/start", response_model=OrchestrateResponse)
 async def start_orchestration(req: OrchestrateRequest):
     try:
@@ -125,11 +140,57 @@ async def start_orchestration(req: OrchestrateRequest):
             "project": req.project,
             "objective": req.objective,
             "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         logger.info(
             "Orchestration started", extra={"extra": {"session_id": session_id}}
         )
+        # Broadcast session started update
+        try:
+            await manager.broadcast_session_update(
+                session_id,
+                {
+                    "status": "started",
+                    "project": req.project,
+                    "agents": [
+                        c.get("role", c.get("name", "unknown")) for c in agent_configs
+                    ],
+                },
+            )
+        except Exception as be:
+            logger.warning(
+                "Broadcast failed on start", extra={"extra": {"error": str(be)}}
+            )
+
+        # Start a background task to periodically broadcast session progress
+        async def _progress_loop():
+            step = 0
+            try:
+                while (
+                    session_id in active_sessions
+                    and active_sessions[session_id].get("status") == "active"
+                ):
+                    step += 1
+                    update = {
+                        "status": "active",
+                        "progress_step": step,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    try:
+                        await manager.broadcast_session_update(session_id, update)
+                    except Exception as pe:
+                        logger.warning(
+                            "Broadcast failed on progress",
+                            extra={"extra": {"error": str(pe)}},
+                        )
+                    await asyncio.sleep(2)
+            except asyncio.CancelledError:
+                # graceful stop
+                pass
+
+        task = asyncio.create_task(_progress_loop())
+        active_sessions[session_id]["progress_task"] = task
         return {"session_id": session_id, "status": "started"}
 
     except Exception as e:
@@ -155,10 +216,27 @@ async def stop_orchestration(req: StopRequest):
 
         # Update session status
         active_sessions[req.session_id]["status"] = "stopped"
+        # Cancel progress task if running
+        task = active_sessions[req.session_id].get("progress_task")
+        if task:
+            try:
+                task.cancel()
+            except Exception:
+                pass
 
         logger.info(
             "Orchestration stopped", extra={"extra": {"session_id": req.session_id}}
         )
+        # Broadcast session stopped update
+        try:
+            await manager.broadcast_session_update(
+                req.session_id,
+                {"status": "stopped"},
+            )
+        except Exception as be:
+            logger.warning(
+                "Broadcast failed on stop", extra={"extra": {"error": str(be)}}
+            )
         return {"session_id": req.session_id, "status": "stopped"}
 
     except HTTPException:
@@ -166,6 +244,44 @@ async def stop_orchestration(req: StopRequest):
     except Exception as e:
         logger.error("Failed to stop orchestration", extra={"extra": {"error": str(e)}})
         raise HTTPException(status_code=500, detail=f"Stop failed: {str(e)}")
+
+
+@app.get("/orchestrate/sessions", response_model=SessionsResponse)
+async def list_sessions():
+    """List all active and stopped orchestration sessions."""
+    try:
+        sessions = []
+        for session_id, session_data in active_sessions.items():
+            # Extract agent roles from the orchestrator
+            agent_roles = []
+            if "orchestrator" in session_data:
+                orchestrator = session_data["orchestrator"]
+                if hasattr(orchestrator, "agent_configs"):
+                    agent_roles = [
+                        config.get("role", config.get("name", "unknown"))
+                        for config in orchestrator.agent_configs
+                    ]
+
+            session_info = SessionInfo(
+                session_id=session_id,
+                project=session_data.get("project", "unknown"),
+                objective=session_data.get("objective", ""),
+                status=session_data.get("status", "unknown"),
+                agents=agent_roles,
+                created_at=session_data.get(
+                    "created_at", datetime.utcnow().isoformat() + "Z"
+                ),
+            )
+            sessions.append(session_info)
+
+        logger.info(
+            "Listed sessions", extra={"extra": {"session_count": len(sessions)}}
+        )
+        return SessionsResponse(sessions=sessions)
+
+    except Exception as e:
+        logger.error("Failed to list sessions", extra={"extra": {"error": str(e)}})
+        raise HTTPException(status_code=500, detail=f"Session listing failed: {str(e)}")
 
 
 class MemorySearchRequest(BaseModel):

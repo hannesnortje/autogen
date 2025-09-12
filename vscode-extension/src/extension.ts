@@ -1,28 +1,37 @@
 import * as vscode from 'vscode';
-import { AutoGenSessionProvider } from './sessionProvider';
 import { AutoGenMemoryProvider } from './memoryProvider';
 import { McpClient, McpServerError } from './mcpClient';
+import { SessionTreeProvider, SessionData } from './sessionTreeProvider';
+import { registerMemoryExplorerCommand } from './memoryExplorerPanel';
+import { AutoGenStatusBar, registerStatusBarCommands } from './statusBar';
+import { registerAgentConfigurationCommand } from './agentConfigPanel';
+import { registerSmartCommands } from './smartCommands';
+import { RealtimeClient } from './realtime';
 
 let mcpClient: McpClient;
-let sessionProvider: AutoGenSessionProvider;
+let sessionTreeProvider: SessionTreeProvider;
 let memoryProvider: AutoGenMemoryProvider;
-let statusBarItem: vscode.StatusBarItem;
+let statusBar: AutoGenStatusBar;
+let realtime: RealtimeClient;
+// Track open session dashboards for live refreshes
+const openSessionPanels = new Map<string, vscode.WebviewPanel>();
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     console.log('AutoGen MCP extension is now active!');
 
     // Initialize MCP client
     const config = vscode.workspace.getConfiguration('autogen');
     const serverUrl = config.get<string>('serverUrl', 'http://localhost:9000');
     mcpClient = new McpClient(serverUrl);
+    realtime = new RealtimeClient(mcpClient);
 
     // Initialize providers
-    sessionProvider = new AutoGenSessionProvider(mcpClient);
+    sessionTreeProvider = new SessionTreeProvider(mcpClient);
     memoryProvider = new AutoGenMemoryProvider(mcpClient);
 
     // Register tree data providers
     vscode.window.createTreeView('autogen.sessionView', {
-        treeDataProvider: sessionProvider,
+        treeDataProvider: sessionTreeProvider,
         showCollapseAll: true
     });
 
@@ -54,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
 
         vscode.commands.registerCommand('autogen.refreshSessions', () => {
-            sessionProvider.refresh();
+            sessionTreeProvider.refresh();
         }),
 
         vscode.commands.registerCommand('autogen.refreshMemory', () => {
@@ -63,25 +72,108 @@ export function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('autogen.checkServerStatus', async () => {
             await checkServerStatus();
+        }),
+
+        vscode.commands.registerCommand('autogen.openSessionDashboard', async (sessionId: string) => {
+            await openSessionDashboard(sessionId);
+        }),
+
+        vscode.commands.registerCommand('autogen.viewAgentDetails', async (sessionId: string, agentName: string) => {
+            await viewAgentDetails(sessionId, agentName);
         })
     ];
 
     // Add all commands to context subscriptions
     commands.forEach(command => context.subscriptions.push(command));
 
-    // Show status in status bar
-    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    statusBarItem.command = 'autogen.showDashboard';
-    statusBarItem.show();
-    context.subscriptions.push(statusBarItem);
+    // Register memory explorer command
+    registerMemoryExplorerCommand(context, mcpClient);
+
+    // Register agent configuration command
+    registerAgentConfigurationCommand(context, mcpClient);
+
+    // Register smart commands
+    const smartCommandPalette = registerSmartCommands(context, mcpClient, sessionTreeProvider);
+
+    // Register status bar commands
+    registerStatusBarCommands(context);
+
+    // Initialize enhanced status bar
+    statusBar = new AutoGenStatusBar(context, mcpClient, sessionTreeProvider);
 
     // Initial server status check
-    updateStatusBar();
+    await statusBar.updateStatusBar();
+
+    // Global realtime wiring: refresh views and stream progress on updates
+    const globalRtSub = realtime.onMessage((msg) => {
+        try {
+            if (msg.type === 'session_update') {
+                // Always refresh sessions and memory on updates
+                sessionTreeProvider.refresh();
+                memoryProvider.refresh();
+                statusBar.refresh();
+
+                // Stream progress to VS Code progress API
+                if (msg.session_id) {
+                    handleProgressForSession(msg.session_id, msg);
+                }
+            }
+        } catch (e) {
+            // no-op
+        }
+    });
+    context.subscriptions.push(globalRtSub);
 
     // Auto-start server if configured
     const autoStart = config.get<boolean>('autoStart', false);
     if (autoStart) {
         vscode.window.showInformationMessage('AutoGen MCP: Auto-start is enabled');
+    }
+}
+
+// Track active progress UIs by session
+const activeProgress = new Set<string>();
+
+function handleProgressForSession(sessionId: string, msg: any) {
+    const status = msg?.data?.status as string | undefined;
+    const step = msg?.data?.progress_step as string | number | undefined;
+
+    // Start a progress UI if session becomes active and no UI is running
+    if (status === 'active' && !activeProgress.has(sessionId)) {
+        activeProgress.add(sessionId);
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Window,
+            title: `AutoGen session ${sessionId.substring(0,8)} active`,
+            cancellable: false
+        }, (progress) => new Promise<void>((resolve) => {
+            // Create a scoped listener to feed progress updates
+            const sub = realtime.onMessage((inner) => {
+                try {
+                    if (inner.type !== 'session_update' || inner.session_id !== sessionId) {
+                        return;
+                    }
+                    const innerStatus = inner?.data?.status as string | undefined;
+                    const innerStep = inner?.data?.progress_step as string | number | undefined;
+                    const innerMsg = typeof innerStep !== 'undefined' ? `Step: ${innerStep}` : (innerStatus ? `Status: ${innerStatus}` : undefined);
+                    progress.report({ message: innerMsg });
+                    if (innerStatus === 'stopped') {
+                        // Finish
+                        sub.dispose();
+                        activeProgress.delete(sessionId);
+                        resolve();
+                    }
+                } catch {
+                    // ignore
+                }
+            });
+        }));
+        return;
+    }
+
+    // If we already have a progress UI, we report via the listener above.
+    // If we see a stopped status but no active UI, just ensure cleanup.
+    if (status === 'stopped') {
+        activeProgress.delete(sessionId);
     }
 }
 
@@ -93,24 +185,6 @@ async function checkServerConnection(): Promise<boolean> {
     }
 }
 
-async function updateStatusBar() {
-    const isConnected = await checkServerConnection();
-    const sessionId = mcpClient.getCurrentSessionId();
-
-    if (isConnected) {
-        if (sessionId) {
-            statusBarItem.text = "$(robot) AutoGen (Active)";
-            statusBarItem.tooltip = `AutoGen MCP - Session: ${sessionId.substring(0, 8)}...`;
-        } else {
-            statusBarItem.text = "$(robot) AutoGen (Ready)";
-            statusBarItem.tooltip = "AutoGen MCP - Ready";
-        }
-    } else {
-        statusBarItem.text = "$(robot) AutoGen (Disconnected)";
-        statusBarItem.tooltip = `AutoGen MCP - Server unavailable at ${mcpClient.serverUrl}`;
-    }
-}
-
 async function checkServerStatus() {
     const isConnected = await checkServerConnection();
     if (isConnected) {
@@ -118,7 +192,7 @@ async function checkServerStatus() {
     } else {
         vscode.window.showErrorMessage(`AutoGen MCP server is not available at ${mcpClient.serverUrl}`);
     }
-    await updateStatusBar();
+    statusBar.refresh();
 }
 
 async function startSession() {
@@ -198,8 +272,13 @@ async function startSession() {
                 `AutoGen session started successfully! Session ID: ${response.session_id.substring(0, 8)}...`
             );
 
-            sessionProvider.refresh();
-            await updateStatusBar();
+            sessionTreeProvider.refresh();
+            statusBar.refresh();
+
+            // Connect realtime updates for this new session
+            if (response.session_id) {
+                try { realtime.connect(response.session_id); } catch {}
+            }
         });
 
     } catch (error) {
@@ -214,14 +293,38 @@ async function startSession() {
 
 async function stopSession() {
     try {
-        const currentSessionId = mcpClient.getCurrentSessionId();
-        if (!currentSessionId) {
-            vscode.window.showInformationMessage('No active session to stop');
-            return;
+        let targetSessionId = mcpClient.getCurrentSessionId();
+        if (!targetSessionId) {
+            // Fallback: try to fetch active sessions and prompt user
+            try {
+                const sessions = await mcpClient.listSessions();
+                const active = sessions.filter(s => s.status === 'active');
+                if (active.length === 0) {
+                    vscode.window.showInformationMessage('No active session to stop');
+                    return;
+                }
+                if (active.length === 1) {
+                    targetSessionId = active[0].session_id;
+                } else {
+                    const picked = await vscode.window.showQuickPick(
+                        active.map(s => ({
+                            label: `${s.project || 'Session'} (${s.session_id.substring(0,8)}...)`,
+                            description: new Date(s.created_at).toLocaleString(),
+                            session_id: s.session_id
+                        })),
+                        { placeHolder: 'Select a session to stop' }
+                    );
+                    if (!picked) { return; }
+                    targetSessionId = picked.session_id;
+                }
+            } catch (e) {
+                vscode.window.showWarningMessage('Could not retrieve sessions from server.');
+                return;
+            }
         }
 
         const choice = await vscode.window.showWarningMessage(
-            `Stop the current AutoGen session (${currentSessionId.substring(0, 8)}...)?`,
+            `Stop the AutoGen session (${targetSessionId.substring(0, 8)}...)?`,
             'Stop Session',
             'Cancel'
         );
@@ -237,13 +340,27 @@ async function stopSession() {
         }, async (progress) => {
             progress.report({ increment: 0, message: "Stopping session..." });
 
-            const response = await mcpClient.stopSession();
+            if (!targetSessionId) {
+                // Extra guard for TypeScript; logic above should set this
+                vscode.window.showInformationMessage('No active session to stop');
+                return;
+            }
+            const response = await mcpClient.stopSession(targetSessionId);
 
             progress.report({ increment: 100, message: "Session stopped!" });
 
-            vscode.window.showInformationMessage(`Session stopped: ${response.message}`);
-            sessionProvider.refresh();
-            await updateStatusBar();
+            vscode.window.showInformationMessage(`Session stopped: ${response.status}`);
+            sessionTreeProvider.refresh();
+            statusBar.refresh();
+
+            // If a session dashboard is open, re-render it with updated data
+            const panel = openSessionPanels.get(targetSessionId);
+            if (panel) {
+                const updated = sessionTreeProvider.getSession(targetSessionId);
+                if (updated) {
+                    panel.webview.html = getSessionDashboardHtml(updated);
+                }
+            }
         });
 
     } catch (error) {
@@ -405,21 +522,20 @@ async function addObjective() {
 
 async function showDashboard() {
     try {
-        // Create and show dashboard webview
+        // Create and show comprehensive dashboard webview
         const panel = vscode.window.createWebviewPanel(
             'autogenDashboard',
             'AutoGen Dashboard',
             vscode.ViewColumn.One,
             {
-                enableScripts: true
+                enableScripts: true,
+                retainContextWhenHidden: true
             }
         );
 
-        // Check server status for dashboard
-        const isConnected = await checkServerConnection();
-        const sessionId = mcpClient.getCurrentSessionId();
-
-        panel.webview.html = getDashboardHtml(isConnected, sessionId);
+        // Get comprehensive dashboard data
+        const dashboardData = await getDashboardData();
+        panel.webview.html = getComprehensiveDashboardHtml(dashboardData);
 
         // Handle messages from the webview
         panel.webview.onDidReceiveMessage(
@@ -434,6 +550,19 @@ async function showDashboard() {
                     case 'stopSession':
                         await stopSession();
                         break;
+                    case 'refreshDashboard':
+                        const newData = await getDashboardData();
+                        panel.webview.html = getComprehensiveDashboardHtml(newData);
+                        break;
+                    case 'openMemoryExplorer':
+                        await vscode.commands.executeCommand('autogen.openMemoryExplorer');
+                        break;
+                    case 'configureAgent':
+                        await vscode.commands.executeCommand('autogen.configureAgent');
+                        break;
+                    case 'exportSession':
+                        await exportSessionData();
+                        break;
                 }
             },
             undefined,
@@ -446,10 +575,119 @@ async function showDashboard() {
     }
 }
 
-function getDashboardHtml(isConnected: boolean, sessionId: string | null): string {
-    const statusClass = isConnected ? 'connected' : 'disconnected';
-    const statusText = isConnected ? 'Connected' : 'Disconnected';
-    const sessionInfo = sessionId ? `<p><strong>Active Session:</strong> ${sessionId.substring(0, 8)}...</p>` : '<p>No active session</p>';
+async function getDashboardData() {
+    const isConnected = await checkServerConnection();
+    const sessionId = mcpClient.getCurrentSessionId();
+    const allSessions = sessionTreeProvider.getAllSessions();
+    const activeSessions = allSessions.filter(s => s.status === 'active');
+
+    return {
+        serverStatus: {
+            connected: isConnected,
+            url: mcpClient.serverUrl,
+            lastChecked: new Date().toISOString()
+        },
+        currentSession: sessionId ? {
+            id: sessionId,
+            session: sessionTreeProvider.getSession(sessionId)
+        } : null,
+        statistics: {
+            totalSessions: allSessions.length,
+            activeSessions: activeSessions.length,
+            totalAgents: allSessions.reduce((sum, s) => sum + s.agents.length, 0),
+            activeAgents: activeSessions.reduce((sum, s) => sum + s.agents.length, 0),
+            totalConversations: allSessions.reduce((sum, s) => sum + s.conversation_count, 0),
+            totalMemories: allSessions.reduce((sum, s) => sum + s.memory_count, 0)
+        },
+        sessions: allSessions,
+        workspace: {
+            name: vscode.workspace.name || 'Unknown',
+            folders: vscode.workspace.workspaceFolders?.length || 0,
+            hasGit: vscode.workspace.workspaceFolders?.some(folder =>
+                vscode.workspace.fs.stat(vscode.Uri.joinPath(folder.uri, '.git')).then(() => true, () => false)
+            ) || false
+        }
+    };
+}
+
+async function exportSessionData() {
+    try {
+        const allSessions = sessionTreeProvider.getAllSessions();
+        const dashboardData = await getDashboardData();
+
+        const exportData = {
+            timestamp: new Date().toISOString(),
+            workspace: dashboardData.workspace,
+            server: dashboardData.serverStatus,
+            statistics: dashboardData.statistics,
+            sessions: allSessions.map(session => ({
+                ...session,
+                // Remove sensitive data if needed
+                memory_data: undefined
+            }))
+        };
+
+        const content = JSON.stringify(exportData, null, 2);
+        const document = await vscode.workspace.openTextDocument({
+            content,
+            language: 'json'
+        });
+
+        await vscode.window.showTextDocument(document);
+        vscode.window.showInformationMessage('Session data exported successfully');
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Export failed: ${error}`);
+    }
+}
+
+function getComprehensiveDashboardHtml(data: any): string {
+    const statusClass = data.serverStatus.connected ? 'connected' : 'disconnected';
+    const statusText = data.serverStatus.connected ? 'Connected' : 'Disconnected';
+    const statusIcon = data.serverStatus.connected ? '🟢' : '🔴';
+
+    const currentSessionInfo = data.currentSession ?
+        `<div class="current-session">
+            <h3>🎯 Current Session</h3>
+            <div class="session-card active">
+                <div class="session-header">
+                    <span class="session-name">${data.currentSession.session?.name || 'Unnamed Session'}</span>
+                    <span class="session-status active">Active</span>
+                </div>
+                <div class="session-details">
+                    <span>ID: ${data.currentSession.id.substring(0, 8)}...</span>
+                    <span>Agents: ${data.currentSession.session?.agents.length || 0}</span>
+                    <span>Conversations: ${data.currentSession.session?.conversation_count || 0}</span>
+                </div>
+                <div class="session-agents">
+                    ${(data.currentSession.session?.agents || []).map((agent: string) =>
+                        `<span class="agent-badge">${agent}</span>`
+                    ).join('')}
+                </div>
+            </div>
+        </div>` :
+        `<div class="no-session">
+            <h3>🎯 No Active Session</h3>
+            <p>Start a new session to begin collaborating with AI agents.</p>
+            <button onclick="sendMessage('startSession')" class="action-button primary">Start Session</button>
+        </div>`;
+
+    const recentSessions = data.sessions
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5)
+        .map((session: any) => `
+            <div class="session-item">
+                <div class="session-header">
+                    <span class="session-name">${session.name}</span>
+                    <span class="session-status ${session.status}">${session.status}</span>
+                </div>
+                <div class="session-meta">
+                    <span>${session.agents.length} agents</span>
+                    <span>${session.conversation_count} conversations</span>
+                    <span>${new Date(session.created_at).toLocaleDateString()}</span>
+                </div>
+            </div>
+        `).join('');
 
     return `
         <!DOCTYPE html>
@@ -459,110 +697,668 @@ function getDashboardHtml(isConnected: boolean, sessionId: string | null): strin
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>AutoGen Dashboard</title>
             <style>
+                :root {
+                    --primary-color: #007ACC;
+                    --success-color: #28a745;
+                    --warning-color: #ffc107;
+                    --danger-color: #dc3545;
+                    --border-radius: 8px;
+                    --spacing: 16px;
+                    --animation-duration: 0.3s;
+                }
+
+                * {
+                    box-sizing: border-box;
+                }
+
+                body {
+                    font-family: var(--vscode-font-family);
+                    padding: 24px;
+                    margin: 0;
+                    background-color: var(--vscode-editor-background);
+                    color: var(--vscode-editor-foreground);
+                    line-height: 1.6;
+                }
+
+                .dashboard-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 32px;
+                    padding-bottom: 16px;
+                    border-bottom: 2px solid var(--vscode-panel-border);
+                }
+
+                .dashboard-title {
+                    font-size: 2.5em;
+                    font-weight: bold;
+                    margin: 0;
+                    background: linear-gradient(45deg, var(--primary-color), #00d4aa);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                }
+
+                .header-actions {
+                    display: flex;
+                    gap: 12px;
+                }
+
+                .server-status {
+                    margin: 24px 0;
+                    padding: 20px;
+                    border-radius: var(--border-radius);
+                    border: 1px solid var(--vscode-panel-border);
+                    background: var(--vscode-editor-inactiveSelectionBackground);
+                    transition: all var(--animation-duration);
+                }
+
+                .server-status.connected {
+                    border-color: var(--success-color);
+                    background: rgba(40, 167, 69, 0.1);
+                }
+
+                .server-status.disconnected {
+                    border-color: var(--danger-color);
+                    background: rgba(220, 53, 69, 0.1);
+                }
+
+                .status-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    margin-bottom: 12px;
+                }
+
+                .status-indicator {
+                    font-size: 1.2em;
+                }
+
+                .dashboard-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 24px;
+                    margin-bottom: 32px;
+                }
+
+                .dashboard-section {
+                    background: var(--vscode-editor-inactiveSelectionBackground);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: var(--border-radius);
+                    padding: 24px;
+                    transition: transform var(--animation-duration), box-shadow var(--animation-duration);
+                }
+
+                .dashboard-section:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                }
+
+                .section-title {
+                    font-size: 1.3em;
+                    font-weight: 600;
+                    margin-bottom: 16px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 16px;
+                    margin-top: 16px;
+                }
+
+                .stat-item {
+                    text-align: center;
+                    padding: 16px;
+                    background: var(--vscode-button-background);
+                    border-radius: var(--border-radius);
+                    transition: background-color var(--animation-duration);
+                }
+
+                .stat-item:hover {
+                    background: var(--vscode-button-hoverBackground);
+                }
+
+                .stat-number {
+                    font-size: 2em;
+                    font-weight: bold;
+                    color: var(--primary-color);
+                    display: block;
+                }
+
+                .stat-label {
+                    font-size: 0.9em;
+                    color: var(--vscode-descriptionForeground);
+                    margin-top: 4px;
+                }
+
+                .current-session {
+                    grid-column: 1 / -1;
+                }
+
+                .session-card {
+                    padding: 20px;
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: var(--border-radius);
+                    background: var(--vscode-editor-background);
+                    margin-top: 12px;
+                }
+
+                .session-card.active {
+                    border-color: var(--success-color);
+                    background: rgba(40, 167, 69, 0.05);
+                }
+
+                .session-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 12px;
+                }
+
+                .session-name {
+                    font-weight: 600;
+                    font-size: 1.1em;
+                }
+
+                .session-status {
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 0.8em;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }
+
+                .session-status.active {
+                    background: var(--success-color);
+                    color: white;
+                }
+
+                .session-status.stopped {
+                    background: var(--vscode-descriptionForeground);
+                    color: white;
+                }
+
+                .session-details {
+                    display: flex;
+                    gap: 16px;
+                    font-size: 0.9em;
+                    color: var(--vscode-descriptionForeground);
+                    margin-bottom: 12px;
+                }
+
+                .session-agents {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                }
+
+                .agent-badge {
+                    background: var(--primary-color);
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 12px;
+                    font-size: 0.8em;
+                    font-weight: 500;
+                }
+
+                .no-session {
+                    text-align: center;
+                    padding: 40px 20px;
+                    color: var(--vscode-descriptionForeground);
+                }
+
+                .session-item {
+                    padding: 12px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    transition: background-color var(--animation-duration);
+                }
+
+                .session-item:hover {
+                    background: var(--vscode-list-hoverBackground);
+                }
+
+                .session-item:last-child {
+                    border-bottom: none;
+                }
+
+                .session-meta {
+                    display: flex;
+                    gap: 12px;
+                    font-size: 0.8em;
+                    color: var(--vscode-descriptionForeground);
+                    margin-top: 4px;
+                }
+
+                .quick-actions {
+                    grid-column: 1 / -1;
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 16px;
+                    margin-top: 16px;
+                }
+
+                .action-button {
+                    padding: 16px 20px;
+                    border: 1px solid var(--vscode-button-border);
+                    border-radius: var(--border-radius);
+                    background: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    text-align: center;
+                    cursor: pointer;
+                    transition: all var(--animation-duration);
+                    font-weight: 500;
+                    text-decoration: none;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                }
+
+                .action-button:hover {
+                    background: var(--vscode-button-hoverBackground);
+                    transform: translateY(-1px);
+                }
+
+                .action-button.primary {
+                    background: var(--primary-color);
+                    color: white;
+                    border-color: var(--primary-color);
+                }
+
+                .action-button.primary:hover {
+                    background: #005a9e;
+                }
+
+                .action-button.secondary {
+                    background: var(--vscode-button-secondaryBackground);
+                    color: var(--vscode-button-secondaryForeground);
+                }
+
+                .workspace-info {
+                    margin-top: 24px;
+                    padding: 16px;
+                    background: var(--vscode-editor-inactiveSelectionBackground);
+                    border-radius: var(--border-radius);
+                    border: 1px solid var(--vscode-panel-border);
+                }
+
+                .workspace-details {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                    gap: 12px;
+                    margin-top: 12px;
+                }
+
+                .workspace-detail {
+                    text-align: center;
+                    font-size: 0.9em;
+                }
+
+                .detail-value {
+                    font-weight: 600;
+                    color: var(--primary-color);
+                }
+
+                @keyframes pulse {
+                    0% { opacity: 1; }
+                    50% { opacity: 0.7; }
+                    100% { opacity: 1; }
+                }
+
+                .loading {
+                    animation: pulse 2s infinite;
+                }
+
+                @media (max-width: 768px) {
+                    .dashboard-grid {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .stats-grid {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .quick-actions {
+                        grid-template-columns: 1fr;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="dashboard-header">
+                <h1 class="dashboard-title">🤖 AutoGen Dashboard</h1>
+                <div class="header-actions">
+                    <button onclick="sendMessage('refreshDashboard')" class="action-button secondary">🔄 Refresh</button>
+                    <button onclick="sendMessage('exportSession')" class="action-button secondary">📤 Export</button>
+                </div>
+            </div>
+
+            <div class="server-status ${statusClass}">
+                <div class="status-header">
+                    <span class="status-indicator">${statusIcon}</span>
+                    <h3>Server Status: ${statusText}</h3>
+                </div>
+                <p><strong>MCP Server:</strong> ${data.serverStatus.url}</p>
+                <p><strong>Last Checked:</strong> ${new Date(data.serverStatus.lastChecked).toLocaleString()}</p>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="dashboard-section">
+                    <h3 class="section-title">📊 Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-number">${data.statistics.activeSessions}</span>
+                            <span class="stat-label">Active Sessions</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number">${data.statistics.totalSessions}</span>
+                            <span class="stat-label">Total Sessions</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number">${data.statistics.activeAgents}</span>
+                            <span class="stat-label">Active Agents</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number">${data.statistics.totalConversations}</span>
+                            <span class="stat-label">Conversations</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-section">
+                    <h3 class="section-title">📋 Recent Sessions</h3>
+                    ${recentSessions || '<p>No sessions found</p>'}
+                </div>
+
+                ${currentSessionInfo}
+
+                <div class="dashboard-section">
+                    <h3 class="section-title">⚡ Quick Actions</h3>
+                    <div class="quick-actions">
+                        <button onclick="sendMessage('startSession')" class="action-button primary">
+                            ▶️ Start Session
+                        </button>
+                        <button onclick="sendMessage('stopSession')" class="action-button">
+                            ⏹️ Stop Session
+                        </button>
+                        <button onclick="sendMessage('openMemoryExplorer')" class="action-button">
+                            🧠 Memory Explorer
+                        </button>
+                        <button onclick="sendMessage('configureAgent')" class="action-button">
+                            🤖 Configure Agent
+                        </button>
+                        <button onclick="sendMessage('checkStatus')" class="action-button secondary">
+                            🔍 Check Server
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="workspace-info">
+                <h3>📁 Workspace Information</h3>
+                <div class="workspace-details">
+                    <div class="workspace-detail">
+                        <div class="detail-value">${data.workspace.name}</div>
+                        <div>Workspace</div>
+                    </div>
+                    <div class="workspace-detail">
+                        <div class="detail-value">${data.workspace.folders}</div>
+                        <div>Folders</div>
+                    </div>
+                    <div class="workspace-detail">
+                        <div class="detail-value">${data.statistics.totalMemories}</div>
+                        <div>Memories</div>
+                    </div>
+                </div>
+            </div>
+
+            <script>
+                const vscode = acquireVsCodeApi();
+
+                function sendMessage(command) {
+                    vscode.postMessage({
+                        command: command
+                    });
+                }
+
+                // Auto-refresh every 30 seconds
+                setInterval(() => {
+                    sendMessage('refreshDashboard');
+                }, 30000);
+
+                // Add loading states for better UX
+                document.querySelectorAll('.action-button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        button.classList.add('loading');
+                        setTimeout(() => {
+                            button.classList.remove('loading');
+                        }, 1000);
+                    });
+                });
+            </script>
+        </body>
+        </html>
+    `;
+}
+
+async function openSessionDashboard(sessionId: string) {
+    try {
+        const session = sessionTreeProvider.getSession(sessionId);
+        if (!session) {
+            vscode.window.showErrorMessage('Session not found');
+            return;
+        }
+
+        // Create and show session-specific dashboard webview
+        const panel = vscode.window.createWebviewPanel(
+            'sessionDashboard',
+            `Session: ${session.name}`,
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true
+            }
+        );
+
+        panel.webview.html = getSessionDashboardHtml(session);
+        openSessionPanels.set(sessionId, panel);
+
+        // Connect realtime updates for this session
+        try { realtime.connect(sessionId); } catch {}
+
+        const subscription = realtime.onMessage((msg) => {
+            try {
+                if (msg.type === 'session_update' && msg.session_id === sessionId) {
+                    // Refresh tree and webview on updates
+                    sessionTreeProvider.refresh();
+                    const updated = sessionTreeProvider.getSession(sessionId);
+                    if (updated) {
+                        panel.webview.html = getSessionDashboardHtml(updated);
+                    }
+                }
+            } catch {}
+        });
+
+        // Handle messages from the webview
+        panel.webview.onDidReceiveMessage(
+            async message => {
+                switch (message.command) {
+                    case 'refreshSession':
+                        sessionTreeProvider.refresh();
+                        // Update webview content
+                        const updatedSession = sessionTreeProvider.getSession(sessionId);
+                        if (updatedSession) {
+                            panel.webview.html = getSessionDashboardHtml(updatedSession);
+                        }
+                        break;
+                    case 'stopSession':
+                        await stopSession();
+                        break;
+                }
+            }
+        );
+
+        panel.onDidDispose(() => {
+            try { subscription.dispose(); } catch {}
+            try { realtime.disconnect(sessionId); } catch {}
+            openSessionPanels.delete(sessionId);
+        });
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to open session dashboard: ${error}`);
+    }
+}
+
+async function viewAgentDetails(sessionId: string, agentName: string) {
+    try {
+        const session = sessionTreeProvider.getSession(sessionId);
+        if (!session) {
+            vscode.window.showErrorMessage('Session not found');
+            return;
+        }
+
+        // Create and show agent details webview
+        const panel = vscode.window.createWebviewPanel(
+            'agentDetails',
+            `Agent: ${agentName}`,
+            vscode.ViewColumn.Two,
+            {
+                enableScripts: true
+            }
+        );
+
+        panel.webview.html = getAgentDetailsHtml(session, agentName);
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to view agent details: ${error}`);
+    }
+}
+
+function getSessionDashboardHtml(session: SessionData): string {
+    const statusColor = session.status === 'active' ? 'green' :
+                       session.status === 'stopped' ? 'red' : 'orange';
+
+    const agentsList = session.agents.map((agent: string) =>
+        `<li><span class="agent-name">${agent}</span></li>`
+    ).join('');
+
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Session Dashboard</title>
+            <style>
                 body {
                     font-family: var(--vscode-font-family);
                     padding: 20px;
                     background-color: var(--vscode-editor-background);
                     color: var(--vscode-editor-foreground);
                 }
-                .status {
-                    margin: 10px 0;
-                    padding: 15px;
+                .header {
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    padding-bottom: 15px;
+                    margin-bottom: 20px;
+                }
+                .status-badge {
+                    display: inline-block;
+                    padding: 4px 8px;
                     border-radius: 4px;
-                    border: 1px solid var(--vscode-panel-border);
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: white;
+                    background-color: ${statusColor};
                 }
-                .status.connected {
-                    background-color: var(--vscode-terminal-ansiGreen);
-                    color: var(--vscode-terminal-background);
-                }
-                .status.disconnected {
-                    background-color: var(--vscode-terminal-ansiRed);
-                    color: var(--vscode-terminal-background);
-                }
-                .actions {
+                .info-grid {
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                     gap: 15px;
                     margin: 20px 0;
                 }
-                .action-button {
+                .info-card {
                     padding: 15px;
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 4px;
+                    background-color: var(--vscode-editor-inactiveSelectionBackground);
+                }
+                .info-card h3 {
+                    margin-top: 0;
+                    color: var(--vscode-foreground);
+                }
+                .agent-list {
+                    list-style-type: none;
+                    padding: 0;
+                }
+                .agent-list li {
+                    padding: 8px 0;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                .agent-list li:last-child {
+                    border-bottom: none;
+                }
+                .agent-name {
+                    font-weight: bold;
+                    color: var(--vscode-terminal-ansiBlue);
+                }
+                .action-button {
+                    padding: 10px 15px;
+                    margin: 5px;
                     border: 1px solid var(--vscode-button-border);
                     border-radius: 4px;
                     background-color: var(--vscode-button-background);
                     color: var(--vscode-button-foreground);
-                    text-align: center;
                     cursor: pointer;
                     transition: all 0.2s;
                 }
                 .action-button:hover {
                     background-color: var(--vscode-button-hoverBackground);
                 }
-                .section {
-                    margin: 20px 0;
-                    padding: 15px;
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: 4px;
-                }
-                .command-list {
-                    list-style-type: none;
-                    padding: 0;
-                }
-                .command-list li {
-                    padding: 8px 0;
-                    border-bottom: 1px solid var(--vscode-panel-border);
-                }
-                .command-list li:last-child {
-                    border-bottom: none;
-                }
-                .command-code {
-                    font-family: var(--vscode-editor-font-family);
-                    background-color: var(--vscode-textCodeBlock-background);
-                    padding: 2px 6px;
-                    border-radius: 3px;
+                .danger-button {
+                    background-color: var(--vscode-terminal-ansiRed);
+                    color: white;
                 }
             </style>
         </head>
         <body>
-            <h1>🤖 AutoGen MCP Dashboard</h1>
-
-            <div class="status ${statusClass}">
-                <h3>Server Status: ${statusText}</h3>
-                <p><strong>MCP Server:</strong> ${mcpClient?.serverUrl || 'Not configured'}</p>
-                ${sessionInfo}
+            <div class="header">
+                <h1>📊 ${session.name}</h1>
+                <span class="status-badge">${session.status.toUpperCase()}</span>
             </div>
 
-            <div class="actions">
-                <div class="action-button" onclick="sendMessage('checkStatus')">
-                    🔍 Check Server Status
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>📋 Session Info</h3>
+                    <p><strong>ID:</strong> ${session.id}</p>
+                    <p><strong>Created:</strong> ${new Date(session.created_at).toLocaleString()}</p>
+                    ${session.last_activity ? `<p><strong>Last Activity:</strong> ${new Date(session.last_activity).toLocaleString()}</p>` : ''}
                 </div>
-                <div class="action-button" onclick="sendMessage('startSession')">
-                    ▶️ Start New Session
+
+                <div class="info-card">
+                    <h3>📈 Statistics</h3>
+                    <p><strong>Agents:</strong> ${session.agents.length}</p>
+                    <p><strong>Conversations:</strong> ${session.conversation_count}</p>
+                    <p><strong>Memories:</strong> ${session.memory_count}</p>
                 </div>
-                <div class="action-button" onclick="sendMessage('stopSession')">
-                    ⏹️ Stop Current Session
+
+                <div class="info-card">
+                    <h3>🤖 Agents</h3>
+                    ${session.agents.length > 0 ?
+                        `<ul class="agent-list">${agentsList}</ul>` :
+                        '<p>No agents configured</p>'
+                    }
                 </div>
             </div>
 
-            <div class="section">
-                <h3>📋 Available Commands</h3>
-                <ul class="command-list">
-                    <li><span class="command-code">AutoGen: Start Session</span> - Launch a new AutoGen session with selected agents</li>
-                    <li><span class="command-code">AutoGen: Stop Session</span> - Stop the current AutoGen session</li>
-                    <li><span class="command-code">AutoGen: Search Memory</span> - Search through stored project memory</li>
-                    <li><span class="command-code">AutoGen: Add Objective</span> - Add new objectives to the current project</li>
-                    <li><span class="command-code">AutoGen: Check Server Status</span> - Verify MCP server connectivity</li>
-                </ul>
-            </div>
-
-            <div class="section">
-                <h3>🚀 Quick Start</h3>
-                <ol>
-                    <li>Ensure the AutoGen MCP server is running on ${mcpClient?.serverUrl || 'http://localhost:9000'}</li>
-                    <li>Use <kbd>Ctrl+Shift+P</kbd> to open the Command Palette</li>
-                    <li>Type "AutoGen" to see available commands</li>
-                    <li>Start with "AutoGen: Start Session" to begin</li>
-                </ol>
+            <div style="margin-top: 20px;">
+                <button class="action-button" onclick="sendMessage('refreshSession')">🔄 Refresh</button>
+                ${session.status === 'active' ?
+                    '<button class="action-button danger-button" onclick="sendMessage(\'stopSession\')">⏹️ Stop Session</button>' :
+                    ''
+                }
             </div>
 
             <script>
@@ -574,6 +1370,74 @@ function getDashboardHtml(isConnected: boolean, sessionId: string | null): strin
                     });
                 }
             </script>
+        </body>
+        </html>
+    `;
+}
+
+function getAgentDetailsHtml(session: SessionData, agentName: string): string {
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Agent Details</title>
+            <style>
+                body {
+                    font-family: var(--vscode-font-family);
+                    padding: 20px;
+                    background-color: var(--vscode-editor-background);
+                    color: var(--vscode-editor-foreground);
+                }
+                .header {
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    padding-bottom: 15px;
+                    margin-bottom: 20px;
+                }
+                .section {
+                    margin: 20px 0;
+                    padding: 15px;
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 4px;
+                    background-color: var(--vscode-editor-inactiveSelectionBackground);
+                }
+                .code-block {
+                    background-color: var(--vscode-textCodeBlock-background);
+                    padding: 10px;
+                    border-radius: 4px;
+                    font-family: var(--vscode-editor-font-family);
+                    white-space: pre-wrap;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🤖 ${agentName}</h1>
+                <p>Session: ${session.name} (${session.id})</p>
+            </div>
+
+            <div class="section">
+                <h3>📋 Agent Information</h3>
+                <p><strong>Name:</strong> ${agentName}</p>
+                <p><strong>Session Status:</strong> ${session.status}</p>
+                <p><strong>Session Created:</strong> ${new Date(session.created_at).toLocaleString()}</p>
+            </div>
+
+            <div class="section">
+                <h3>⚙️ Configuration</h3>
+                <p>Agent configuration details would be displayed here once available from the MCP server API.</p>
+            </div>
+
+            <div class="section">
+                <h3>💬 Recent Activity</h3>
+                <p>Agent conversation history and recent actions would be displayed here once available from the MCP server API.</p>
+            </div>
+
+            <div class="section">
+                <h3>🧠 Memory</h3>
+                <p>Agent-specific memory and knowledge would be displayed here once available from the MCP server API.</p>
+            </div>
         </body>
         </html>
     `;

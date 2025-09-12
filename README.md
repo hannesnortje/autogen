@@ -11,11 +11,32 @@ This repository implements an AutoGen multi-agent workflow with Qdrant-backed me
 
 ## Project Structure
 - `src/autogen_mcp/`: Main source code (agents, memory, Qdrant, CLI, server, dashboard)
+- `vscode-extension/`: VS Code extension for integrated development experience
 - `tests/`: Unit and integration tests
 - `docs/`: Documentation, ADRs, and guides
 - `.github/`: GitHub Actions workflows and PR templates
 - `docker-compose.yml`: Qdrant service for local development
 - `pyproject.toml`: Poetry dependencies and configuration
+
+## VS Code Extension
+
+The AutoGen MCP VS Code extension provides a rich, integrated development experience for managing AutoGen sessions and agents directly within VS Code.
+
+### Key Features
+- **Session Tree View**: Hierarchical display of active and historical AutoGen sessions in the Explorer sidebar
+- **Memory Explorer**: Advanced panel for exploring and managing agent memories with search and filtering
+- **Enhanced Status Bar**: Real-time status monitoring with server connection, session count, and quick actions
+- **Agent Configuration Panel**: Comprehensive interface for creating and configuring AutoGen agents
+- **Smart Command Palette**: Enhanced command integration with intelligent parameter collection
+- **Session Dashboard**: Central control panel with real-time statistics and session management
+
+### Installation
+1. Open the `vscode-extension/` directory in VS Code
+2. Install dependencies: `npm install`
+3. Press F5 to launch the Extension Development Host
+4. Configure the MCP server connection in VS Code settings
+
+For detailed extension documentation, see [`vscode-extension/README.md`](vscode-extension/README.md).
 
 ## Onboarding & Quick Start
 1. **Install Poetry:** https://python-poetry.org/docs/
