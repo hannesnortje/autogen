@@ -1,8 +1,9 @@
-from autogen_mcp.memory import MemoryService, MemoryConfig
+from autogen_mcp.memory import MemoryService
 
 
 def test_memory_write_and_list(monkeypatch):
-    svc = MemoryService(MemoryConfig(collection="mem_test", summary_threshold=3))
+
+    svc = MemoryService(collection="mem_test", summary_threshold=3)
     svc.ensure_collection()
 
     # Write 3 events
@@ -16,7 +17,7 @@ def test_memory_write_and_list(monkeypatch):
 
 
 def test_memory_summarize_creates_summary(monkeypatch):
-    svc = MemoryService(MemoryConfig(collection="mem_sum", summary_threshold=3))
+    svc = MemoryService(collection="mem_sum", summary_threshold=3)
     svc.ensure_collection()
 
     for i in range(3):

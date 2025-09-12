@@ -188,19 +188,19 @@ Conventions
   - [x] ADR-008: Git policy and artifact linkage
 
 ## Step 10 — Observability and tracing
-- Branch: `feature/10-observability`
-- Scope:
-  - [ ] Structured logging for tool calls, memory ops, commits
-  - [ ] Optional OpenTelemetry hooks
-  - [ ] Correlation IDs across layers
-- Acceptance:
-  - [ ] Logs trace a full agent turn with timings
-  - [ ] Verbosity configurable
-- Tests:
-  - [ ] Unit: logger adapters
-  - [ ] Integration: session log inspection
-- Artifacts:
-  - [ ] ADR-009: Observability choices
+Branch: `feature/10-observability`
+Scope:
+  [x] Structured logging for tool calls, memory ops, commits
+  [ ] Optional OpenTelemetry hooks
+  [x] Correlation IDs across layers
+Acceptance:
+  [x] Logs trace a full agent turn with timings
+  [x] Verbosity configurable
+Tests:
+  [x] Unit: logger adapters
+  [x] Integration: session log inspection
+Artifacts:
+  [ ] ADR-009: Observability choices
 
 ## Step 11 — Security and data hygiene
 - Branch: `feature/11-security`
@@ -268,6 +268,8 @@ Conventions
 ---
 
 ## Change log (append entries as we progress)
+
 - 2024-06-08: Step 7 (AutoGen agents scaffolding, Gemini integration, CLI) completed and merged from 'feature/07-agents-gemini-integration'.
 - 2025-09-12: Step 8 (VS Code MCP server integration) completed and merged from 'feature/08-mcp-server'.
 - 2025-09-12: Step 9 (Git workflow automation, PR/commit/CI artifact linkage) completed and merged from 'feature/09-git-workflow'.
+2025-09-12: Step 10 (Observability and tracing: structured logging, correlation IDs, verbosity, logger adapters, session log inspection) completed and merged from 'feature/10-observability'.
