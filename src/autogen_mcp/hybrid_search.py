@@ -20,9 +20,14 @@ class SparseRetriever:
     def __init__(self, docs: List[str], doc_ids: List[Any]) -> None:
         self.vectorizer = TfidfVectorizer()
         self.doc_ids = doc_ids
-        self.tfidf = self.vectorizer.fit_transform(docs)
+        if not docs:
+            self.tfidf = None
+        else:
+            self.tfidf = self.vectorizer.fit_transform(docs)
 
     def search(self, query: str, top_k: int = 5) -> List[Tuple[Any, float]]:
+        if self.tfidf is None or self.tfidf.shape[0] == 0:
+            return []
         q_vec = self.vectorizer.transform([query])
         scores = (self.tfidf @ q_vec.T).toarray().ravel()
         top_idx = np.argsort(scores)[::-1][:top_k]

@@ -24,3 +24,24 @@ def test_rrf_fusion():
     fused = reciprocal_rank_fusion(a, b, k=3)
     assert set(fused) == {1, 2, 3}
     assert fused[0] in (1, 2, 3)
+
+
+def test_sparse_retriever_empty_corpus():
+    retriever = SparseRetriever([], [])
+    results = retriever.search("anything", top_k=3)
+    assert results == []
+
+
+def test_sparse_retriever_long_query():
+    retriever = SparseRetriever(DOCS, IDS)
+    long_query = "this is a very long query with many words that may or may not match any document in the corpus but should not crash or error out"
+    results = retriever.search(long_query, top_k=3)
+    assert isinstance(results, list)
+
+
+def test_sparse_retriever_stop_words():
+    retriever = SparseRetriever(DOCS, IDS)
+    stop_query = "the and if but or"
+    results = retriever.search(stop_query, top_k=3)
+    # Should return empty or best-effort, but not error
+    assert isinstance(results, list)

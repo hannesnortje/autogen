@@ -144,5 +144,60 @@ class MemoryConfig:
 
 
 # Legacy/test compatibility: MemoryService wraps MemoryConfig for test imports
+
+
 class MemoryService(MemoryConfig):
-    pass
+    def set_project(self, project_slug: str):
+        """Switch to per-project collection for memory events."""
+        self.collection = f"memory_{project_slug}"
+        self.ensure_collection()
+
+    def prune_low_importance(
+        self, importance_threshold: float = 0.2, limit: int = 1000
+    ) -> int:
+        """Prune (delete) low-importance items from the current collection."""
+        # For demo: assume importance is in metadata['importance'] (0-1 float)
+        resp = self.q.scroll(self.collection, must=[], limit=limit, with_payload=True)
+        points = resp.get("result", {}).get("points", [])
+        to_delete = [
+            p["id"]
+            for p in points
+            if p.get("payload", {}).get("metadata", {}).get("importance", 1.0)
+            < importance_threshold
+        ]
+        if not to_delete:
+            return 0
+        # Qdrant batch delete
+        body = {"points": to_delete}
+        url = self.q._url(f"/collections/{self.collection}/points/delete")
+        resp = self.q.session.post(url, json=body, timeout=10)
+        resp.raise_for_status()
+        self.logger.info(
+            "Pruned low-importance items",
+            extra={"extra": {"collection": self.collection, "count": len(to_delete)}},
+        )
+        return len(to_delete)
+
+    def write_decision(
+        self, thread_id: str, text: str, metadata: Optional[dict] = None
+    ) -> str:
+        """Write a decision event to memory (per-turn hook)."""
+        return self.write_event(
+            scope="decision", thread_id=thread_id, text=text, metadata=metadata
+        )
+
+    def write_snippet(
+        self, thread_id: str, text: str, metadata: Optional[dict] = None
+    ) -> str:
+        """Write a code snippet event to memory (per-turn hook)."""
+        return self.write_event(
+            scope="snippet", thread_id=thread_id, text=text, metadata=metadata
+        )
+
+    def write_artifact(
+        self, thread_id: str, text: str, metadata: Optional[dict] = None
+    ) -> str:
+        """Write an artifact event to memory (per-turn hook)."""
+        return self.write_event(
+            scope="artifact", thread_id=thread_id, text=text, metadata=metadata
+        )

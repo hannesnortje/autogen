@@ -41,3 +41,24 @@ def test_encode_store_query_roundtrip():
     assert res.get("status") == "ok"
     top = res.get("result", [])
     assert top and top[0].get("id") == 1
+
+
+def test_embedding_service_health_and_dim():
+    emb = EmbeddingService()
+    # Health: can encode a string and returns correct shape
+    vec = emb.encode_one("test string")
+    dim = emb.dim()
+    assert isinstance(vec, list)
+    assert all(isinstance(x, float) for x in vec)
+    assert len(vec) == dim
+
+
+def test_embedding_service_determinism():
+    emb = EmbeddingService()
+    text = "deterministic embedding test"
+    vec1 = emb.encode_one(text)
+    vec2 = emb.encode_one(text)
+    # Determinism: repeated calls yield same output (within tolerance)
+    assert len(vec1) == len(vec2)
+    for a, b in zip(vec1, vec2):
+        assert abs(a - b) < 1e-6

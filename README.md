@@ -9,49 +9,67 @@ This repository implements an AutoGen multi-agent workflow with Qdrant-backed me
 - VS Code-native control via MCP
 - Git-based workflow with per-agent branches and CI gates
 
-## Requirements
-- Python 3.11+
-- Poetry
-- Docker (for Qdrant)
-- VS Code
+## Project Structure
+- `src/autogen_mcp/`: Main source code (agents, memory, Qdrant, CLI, server, dashboard)
+- `tests/`: Unit and integration tests
+- `docs/`: Documentation, ADRs, and guides
+- `.github/`: GitHub Actions workflows and PR templates
+- `docker-compose.yml`: Qdrant service for local development
+- `pyproject.toml`: Poetry dependencies and configuration
 
-## Quick start
-1. Install Poetry: https://python-poetry.org/docs/
-2. Create env and install deps (after Step 2 adds pyproject):
+## Onboarding & Quick Start
+1. **Install Poetry:** https://python-poetry.org/docs/
+2. **Clone the repo:**
+   ```bash
+   git clone <repo-url>
+   cd autogen
+   ```
+3. **Install dependencies:**
    ```bash
    poetry install
    ```
-3. Run tests:
-   ```bash
-   poetry run pytest -q
-   ```
-4. Start Qdrant (after Step 3 adds compose):
+4. **Start Qdrant:**
    ```bash
    docker compose up -d
    ```
+5. **Copy and edit .env:**
+   ```bash
+   cp .env.example .env
+   # Edit .env as needed
+   ```
+6. **Run tests:**
+   ```bash
+   poetry run pytest -q
+   ```
+7. **Run the CLI dashboard (after Step 13):**
+   ```bash
+   poetry run python -m autogen_mcp.cli_dashboard
+   ```
+
+## Poetry Workflow
+- **Run tests:** `poetry run pytest`
+- **Lint:** `poetry run ruff .`
+- **Format:** `poetry run black .`
+- **Typecheck:** `poetry run mypy src/`
+- **Pre-commit hooks:**
+  - Install: `poetry run pre-commit install`
+  - Run manually: `poetry run pre-commit run --all-files`
+- **Add dependencies:** `poetry add <package>`
+- **Activate shell:** `poetry shell`
 
 ## Configuration
-1) Create a local `.env` by copying `.env.example` and filling in values. Do not commit `.env`.
-   - GEMINI_API_KEY: provide only when we reach Step 7 (agents) to enable live LLM calls. Until then, we run with mocked LLMs.
-   - QDRANT_URL / QDRANT_API_KEY: set based on your local or remote Qdrant instance.
+- `.env` for secrets and API keys (never commit real secrets)
+- Qdrant config: `QDRANT_URL`, `QDRANT_API_KEY`
+- LLM config: `GEMINI_API_KEY` (only needed for agent LLM calls)
 
-2) Check Qdrant is running (after Step 3):
-   - Open http://localhost:6333/ in a browser or:
-   ```bash
-   curl -s http://localhost:6333/collections | jq . | head -n 20
-   ```
-   - If it responds with JSON, Qdrant is up.
-
-3) Confirm Poetry environment:
-   ```bash
-   poetry --version
-   poetry run python -V
-   ```
-
-## Development workflow
+## Development Workflow
 - One step per feature branch, conventional commits, PR checks required.
 - See `IMPLEMENTATION_PLAN.md` for the detailed step plan and checkboxes.
 - Contributions: see `CONTRIBUTING.md`.
+
+## Documentation & ADRs
+- All major decisions are documented in `docs/adrs/` as Architecture Decision Records (ADRs).
+- See `docs/adrs/README.md` (ADR index) for navigation.
 
 ## License
 MIT

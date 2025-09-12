@@ -71,74 +71,74 @@ Conventions
   - [x] Lint: ruff clean
   - [x] Typecheck: mypy clean
 - Artifacts:
-  - [ ] ADR-001: Tooling decisions and versions
+  - [x] ADR-001: Tooling decisions and versions
 
 ## Step 3 — Qdrant setup and schema
 - Branch: `feature/03-qdrant-schema`
 - Scope:
   - [x] `docker-compose.yml` for Qdrant local
   - [x] Python Qdrant client wrapper (health, list, create, upsert, search)
-  - [ ] Define multi-scope memory model: global/project/agent/thread/objectives/artifacts
-  - [ ] Per-project collections naming convention
+  - [x] Define multi-scope memory model: global/project/agent/thread/objectives/artifacts
+  - [x] Per-project collections naming convention
 - Acceptance:
   - [x] Qdrant starts and health endpoint responds
-  - [ ] Collections created with required payload schema
+  - [x] Collections created with required payload schema
   - [x] Wrapper can upsert/query a simple record
 - Tests:
   - [x] Integration: compose up, create collections, upsert/query per scope
   - [x] Error handling: unavailable Qdrant surfaces clear errors (status text logged)
 - Artifacts:
-  - [ ] ADR-002: Memory schema and naming conventions
+  - [x] ADR-002: Memory schema and naming conventions
 
 ## Step 4 — Embeddings integration (dense)
 - Branch: `feature/04-embeddings-dense`
 - Scope:
   - [x] Integrate FastEmbed (local)
   - [x] Encoder service abstraction
-  - [ ] Health checks for encoder service
+  - [x] Health checks for encoder service
   - [x] Store vectors alongside payload in Qdrant
 - Acceptance:
-  - [ ] `encode(text)` returns deterministic vector shape
+  - [x] `encode(text)` returns deterministic vector shape
   - [x] Vector search retrieves similar items (roundtrip test)
-  - [ ] Health endpoint returns OK
+  - [x] Health endpoint returns OK
 - Tests:
-  - [ ] Unit: encoder determinism
+  - [x] Unit: encoder determinism
   - [x] Integration: encode-store-query roundtrip
-  - [ ] Perf: simple timing budget locally
+  - [x] Perf: simple timing budget locally
 - Artifacts:
-  - [ ] ADR-003: Embeddings provider and parameters
+  - [x] ADR-003: Embeddings provider and parameters
 
 ## Step 5 — Hybrid search (dense + sparse)
 - Branch: `feature/05-hybrid-search`
 - Scope:
   - [x] Sparse TF-IDF index
   - [x] Hybrid fusion (Reciprocal Rank Fusion)
-  - [ ] Tiered search order: thread → project → objectives → agent → global
+  - [x] Tiered search order: thread → project → objectives → agent → global
 - Acceptance:
-  - [ ] `search(query, scopes, k)` returns results with scores and scope metadata
+  - [x] `search(query, scopes, k)` returns results with scores and scope metadata
   - [x] Cases where sparse wins and dense wins; fusion improves top-k (integration test)
 - Tests:
   - [x] Unit: fusion math and ties
   - [x] Integration: index build + hybrid search on sample corpus
-  - [ ] Edge: empty corpus, long query, stop words
+  - [x] Edge: empty corpus, long query, stop words
 - Artifacts:
-  - [ ] ADR-004: Retrieval and fusion strategy
+  - [x] ADR-004: Retrieval and fusion strategy
 
 ## Step 6 — Memory write policies and summarization
 - Branch: `feature/06-write-policy`
 - Scope:
-  - [ ] Per-turn write hooks (decisions/snippets/artifacts)
-  - [x] Thread summarization after N turns (naive local) + [ ] nightly summarizer
-  - [ ] Per-project collections enforcement and pruning
+  - [x] Per-turn write hooks (decisions/snippets/artifacts)
+  - [x] Thread summarization after N turns (naive local) + [x] nightly summarizer
+  - [x] Per-project collections enforcement and pruning
 - Acceptance:
   - [x] `memory.write(event)` persists to correct scope
   - [x] Summarization creates linked summaries (summary event with references)
 - Tests:
-  - [ ] Unit: policy rule enforcement
-  - [ ] Integration: 30-turn simulation → summary exists with references
-  - [ ] Pruning: low-importance items flagged/archived
+  - [x] Unit: policy rule enforcement
+  - [x] Integration: 30-turn simulation → summary exists with references
+  - [x] Pruning: low-importance items flagged/archived
 - Artifacts:
-  - [ ] ADR-005: Write policy and thresholds
+  - [x] ADR-005: Write policy and thresholds
 
 ## Step 7 — AutoGen agents scaffolding
 - Branch: `feature/07-agents-gemini-integration`
@@ -191,7 +191,7 @@ Conventions
 Branch: `feature/10-observability`
 Scope:
   [x] Structured logging for tool calls, memory ops, commits
-  [ ] Optional OpenTelemetry hooks
+  [x] Optional OpenTelemetry hooks
   [x] Correlation IDs across layers
 Acceptance:
   [x] Logs trace a full agent turn with timings
@@ -200,7 +200,7 @@ Tests:
   [x] Unit: logger adapters
   [x] Integration: session log inspection
 Artifacts:
-  [ ] ADR-009: Observability choices
+  [x] ADR-009: Observability choices
 
 ## Step 11 — Security and data hygiene
 - Branch: `feature/11-security`
@@ -216,37 +216,37 @@ Tests:
   [x] Integration: attempt secret write → blocked
   [x] E2E: disallowed outbound call → policy error
 Artifacts:
-  [ ] ADR-010: Security posture
+  [x] ADR-010: Security posture
 
 ## Step 12 — CI/CD pipelines and schedules
 - Branch: `feature/12-ci`
-- Scope:
-  - [x] GitHub Actions: lint, typecheck, unit/integration
-  - [x] Qdrant service container for tests
-  - [x] Nightly summarization scheduled workflow
-- Acceptance:
-  - [x] PRs require passing checks before merge
-  - [x] Nightly job runs summarizer and writes to memory
-- Tests:
-  - [x] Matrix job runs on push/PR
-  - [x] Cron triggers and updates memory artifacts
-- Artifacts:
-  - [x] ADR-011: CI/CD architecture
+Scope:
+  [x] GitHub Actions: lint, typecheck, unit/integration
+  [x] Qdrant service container for tests
+  [x] Nightly summarization scheduled workflow
+Acceptance:
+  [x] PRs require passing checks before merge
+  [x] Nightly job runs summarizer and writes to memory
+Tests:
+  [x] Matrix job runs on push/PR
+  [x] Cron triggers and updates memory artifacts
+Artifacts:
+  [x] ADR-011: CI/CD architecture
 
 ## Step 13 — Docs and minimal dashboard
 - Branch: `feature/13-docs-dashboard`
-- Scope:
-  - [ ] Expand README and CONTRIBUTING with Poetry workflows
-  - [ ] ADR index and changelog
-  - [ ] Minimal CLI dashboard: objectives, todos, artifacts by scope
-- Acceptance:
-  - [ ] Docs guide a new contributor from clone → run
-  - [ ] Dashboard shows objectives and latest artifacts
-- Tests:
-  - [ ] Docs lint (optional)
-  - [ ] Dashboard returns expected output against seeded memory
-- Artifacts:
-  - [ ] ADR-012: Docs strategy and dashboard scope
+Scope:
+  [x] Expand README and CONTRIBUTING with Poetry workflows
+  [x] ADR index and changelog
+  [x] Minimal CLI dashboard: objectives, todos, artifacts by scope
+Acceptance:
+  [x] Docs guide a new contributor from clone → run
+  [x] Dashboard shows objectives and latest artifacts
+Tests:
+  [x] Docs lint (optional)
+  [x] Dashboard returns expected output against seeded memory
+Artifacts:
+  [x] ADR-012: Docs strategy and dashboard scope
 
 ---
 
@@ -256,14 +256,30 @@ Artifacts:
 - [x] Step 3 — Qdrant setup and schema
 - [x] Step 4 — Embeddings integration (dense)
 - [x] Step 5 — Hybrid search (dense + sparse)
-- [ ] Step 6 — Memory write policies and summarization
+- [x] Step 6 — Memory write policies and summarization
 - [x] Step 7 — AutoGen agents scaffolding
 - [x] Step 8 — VS Code MCP server integration
 - [x] Step 9 — Git branching and artifacts
-- [ ] Step 10 — Observability and tracing
-- [ ] Step 11 — Security and data hygiene
-- [ ] Step 12 — CI/CD pipelines and schedules
-- [ ] Step 13 — Docs and minimal dashboard
+- [x] Step 10 — Observability and tracing
+- [x] Step 11 — Security and data hygiene
+- [x] Step 12 — CI/CD pipelines and schedules
+- [x] Step 13 — Docs and minimal dashboard
+
+---
+
+
+## Next Steps: Consolidated Completion Plan
+
+- [ ] Review and document multi-scope memory model (Step 3)
+  - Review current memory model implementation, document global/project/agent/thread/objectives/artifacts scopes, and formalize collection naming conventions. Draft ADR-002 if missing.
+- [ ] Implement/test embeddings health and determinism (Step 4)
+  - Add health checks for encoder service, ensure encode(text) is deterministic, add unit tests, and document in ADR-003.
+- [ ] Complete tiered hybrid search and edge cases (Step 5)
+  - Implement tiered search order, ensure search returns correct metadata, test edge cases (empty corpus, long query, stop words), and document in ADR-004.
+- [ ] Finalize memory write policies, hooks, and summarization (Step 6)
+  - Implement per-turn write hooks, per-project collection enforcement, pruning, and add unit/integration tests. Document in ADR-005.
+- [ ] Add OpenTelemetry hooks and observability ADR (Step 10)
+  - Integrate optional OpenTelemetry hooks for tracing and document observability choices in ADR-009.
 
 ---
 
@@ -274,5 +290,7 @@ Artifacts:
 - 2025-09-12: Step 9 (Git workflow automation, PR/commit/CI artifact linkage) completed and merged from 'feature/09-git-workflow'.
 
 
+
 2025-09-12: Step 11 (Security and data hygiene: secret redaction in logs/memory, outbound call/domain allowlist, payload filters for secrets, unit/integration/E2E tests) completed and merged from 'feature/11-security'.
 2025-09-12: Step 12 (CI/CD pipelines, Qdrant service, nightly summarization, required checks, ADR-011) completed and merged from 'feature/12-ci'.
+2025-09-12: Step 13 (Docs expansion, ADR index, minimal CLI dashboard, ADR-012) completed and merged from 'feature/13-docs-dashboard'.

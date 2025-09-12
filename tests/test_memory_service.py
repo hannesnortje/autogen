@@ -52,3 +52,20 @@ def test_memory_blocks_secret_storage():
         assert False, "Expected ValueError for secret in metadata"
     except ValueError as e:
         assert "blocked by policy" in str(e)
+
+
+def test_memory_prune_low_importance(monkeypatch):
+    svc = MemoryService(collection="mem_prune", summary_threshold=3)
+    svc.ensure_collection()
+    # Insert events with varying importance
+    for i in range(5):
+        importance = 0.1 if i < 2 else 0.9
+        svc.write_event(
+            "thread",
+            thread_id="t4",
+            text=f"event {i}",
+            metadata={"importance": importance},
+        )
+    # Prune low-importance (threshold 0.2 should remove first 2)
+    pruned = svc.prune_low_importance(importance_threshold=0.2, limit=10)
+    assert pruned == 2
