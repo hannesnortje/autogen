@@ -1,8 +1,51 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+# Hardcoded default port
+SETTINGS = {"port": 9000}
+
+
 app = FastAPI(title="AutoGen MCP Server")
+
+
+# Settings page for port configuration
+@app.get("/settings", response_class=HTMLResponse)
+def get_settings_page():
+    return f"""
+    <html>
+    <body>
+        <h2>Server Settings</h2>
+        <form action="/settings" method="post">
+            <label for="port">Server Port:</label>
+            <input type="number" id="port" name="port" value="{SETTINGS['port']}" min="1" max="65535" />
+            <input type="submit" value="Update" />
+        </form>
+        <p>Current port: <b>{SETTINGS['port']}</b></p>
+        <p style="color:gray;">Note: Changing the port requires a server restart to take effect.</p>
+    </body>
+    </html>
+    """
+
+
+@app.post("/settings", response_class=HTMLResponse)
+def update_settings_page(port: int = Form(...)):
+    SETTINGS["port"] = port
+    return f"""
+    <html>
+    <body>
+        <h2>Server Settings Updated</h2>
+        <form action="/settings" method="post">
+            <label for="port">Server Port:</label>
+            <input type="number" id="port" name="port" value="{SETTINGS['port']}" min="1" max="65535" />
+            <input type="submit" value="Update" />
+        </form>
+        <p>Current port: <b>{SETTINGS['port']}</b></p>
+        <p style="color:green;">Port updated. Please restart the server to apply changes.</p>
+    </body>
+    </html>
+    """
 
 
 @app.get("/health")
