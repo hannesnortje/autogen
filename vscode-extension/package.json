@@ -49,6 +49,66 @@
         "command": "autogen.checkServerStatus",
         "title": "Check Server Status",
         "category": "AutoGen"
+      },
+      {
+        "command": "autogen.refreshSessions",
+        "title": "Refresh Sessions",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.refreshMemory",
+        "title": "Refresh Memory",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.openSessionDashboard",
+        "title": "Open Session Dashboard",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.viewAgentDetails",
+        "title": "View Agent Details",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.openMemoryExplorer",
+        "title": "Open Memory Explorer",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.quickActions",
+        "title": "Quick Actions",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.refreshAll",
+        "title": "Refresh All Views",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.configureAgent",
+        "title": "Configure Agent",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.startSessionWithParams",
+        "title": "Start Session (Advanced)",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.searchMemoryAdvanced",
+        "title": "Search Memory (Advanced)",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.addObjectiveAdvanced",
+        "title": "Add Objective (Advanced)",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.stopSessionAdvanced",
+        "title": "Stop Session (Advanced)",
+        "category": "AutoGen"
       }
     ],
     "views": {
@@ -62,6 +122,27 @@
           "id": "autogen.memoryView",
           "name": "Memory",
           "when": "true"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "autogen.refreshSessions",
+          "when": "view == autogen.sessionView",
+          "group": "navigation"
+        },
+        {
+          "command": "autogen.refreshMemory",
+          "when": "view == autogen.memoryView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "autogen.openSessionDashboard",
+          "when": "view == autogen.sessionView && viewItem =~ /session-.*/",
+          "group": "inline"
         }
       ]
     },
@@ -86,6 +167,21 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically start MCP server when extension activates"
+        },
+        "autogen.agentConfigurations": {
+          "type": "array",
+          "default": [],
+          "description": "Saved agent configurations",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "role": { "type": "string" },
+              "systemMessage": { "type": "string" },
+              "capabilities": { "type": "array", "items": { "type": "string" } }
+            }
+          }
         }
       }
     }

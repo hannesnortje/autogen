@@ -17,6 +17,9 @@ This index lists all ADRs for the AutoGen + Qdrant + VS Code MCP project. Each A
 | 010    | Security posture                      | Proposed  |
 | 011    | CI/CD architecture                    | Proposed  |
 | 012    | Docs strategy and dashboard scope     | Proposed  |
+| 013    | MCP server real services              | Accepted  |
+| 014    | Realtime file operations              | Accepted  |
+| 017    | VS Code Extension UI Components       | Accepted  |
 
 > ADRs are located in this folder: `docs/adrs/`
 >

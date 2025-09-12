@@ -9,7 +9,7 @@ export interface OrchestrationRequest {
 export interface OrchestrationResponse {
     session_id: string;
     status: string;
-    message: string;
+    message?: string;
 }
 
 export interface MemorySearchRequest {
@@ -37,6 +37,10 @@ export interface SessionInfo {
     status: string;
     agents: string[];
     created_at: string;
+}
+
+export interface SessionsResponse {
+    sessions: SessionInfo[];
 }
 
 export interface StopSessionRequest {
@@ -119,7 +123,7 @@ export class McpClient {
     }
 
     async startOrchestration(request: OrchestrationRequest): Promise<OrchestrationResponse> {
-        const response = await this.makeRequest<OrchestrationResponse>('/orchestrate', {
+        const response = await this.makeRequest<OrchestrationResponse>('/orchestrate/start', {
             method: 'POST',
             body: JSON.stringify(request)
         });
@@ -179,7 +183,8 @@ export class McpClient {
     }
 
     async listSessions(): Promise<SessionInfo[]> {
-        return await this.makeRequest<SessionInfo[]>('/orchestrate/sessions');
+        const resp = await this.makeRequest<SessionsResponse>('/orchestrate/sessions');
+        return resp.sessions || [];
     }
 
     async getHealth(): Promise<{ status: string }> {
