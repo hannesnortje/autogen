@@ -91,3 +91,18 @@ class QdrantWrapper:
             # Include server message for easier debugging
             raise requests.HTTPError(f"{e}: {resp.text}") from e
         return resp.json()
+
+    def search(
+        self,
+        collection: str,
+        vector: List[float],
+        limit: int = 5,
+    ) -> Dict[str, Any]:
+        body = {"vector": vector, "limit": limit}
+        resp = self.session.post(
+            self._url(f"/collections/{collection}/points/search"),
+            json=body,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
