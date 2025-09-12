@@ -8,13 +8,16 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
+requests = "^2.32.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
+pytest-timeout = "^2.3.1"
 black = "^24.0.0"
 ruff = "^0.4.0"
 mypy = "^1.8.0"
 pre-commit = "^3.6.0"
+types-requests = "^2.32.0.20240914"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
