@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from autogen_mcp.memory import MemoryService
+from autogen_mcp.multi_memory import MultiScopeMemoryService
+from autogen_mcp.collections import CollectionManager, MemoryScope
+from autogen_mcp.knowledge_seeder import KnowledgeSeeder
+from autogen_mcp.hybrid_search_service import HybridSearchService, HybridConfig
 from autogen_mcp.orchestrator import AgentOrchestrator
 from autogen_mcp.gemini_client import GeminiClient
 from autogen_mcp.observability import get_logger
@@ -19,7 +22,10 @@ load_dotenv()
 
 # Initialize services
 logger = get_logger("autogen.mcp_server")
-memory_service = MemoryService()
+collection_manager = CollectionManager()
+memory_service = MultiScopeMemoryService(collection_manager)
+knowledge_seeder = KnowledgeSeeder(collection_manager)
+hybrid_search = HybridSearchService(HybridConfig())
 
 # Initialize Gemini client only if API key is available
 try:
@@ -295,23 +301,69 @@ async def memory_search(req: MemorySearchRequest):
     try:
         logger.info(
             "Memory search request",
-            extra={"extra": {"query": req.query, "scope": req.scope, "k": req.k}},
+            extra={
+                "extra": {
+                    "query": req.query,
+                    "scope": req.scope,
+                    "k": req.k,
+                }
+            },
         )
 
-        # Set project scope if specified
-        if req.scope == "project":
-            workspace_path = os.getenv("MCP_WORKSPACE", os.getcwd())
-            project_name = os.path.basename(workspace_path)
+        # Map scope to our memory scope enum
+        scope_mapping = {
+            "global": MemoryScope.GLOBAL,
+            "project": MemoryScope.PROJECT,
+            "agent": MemoryScope.AGENT,
+            "thread": MemoryScope.THREAD,
+            "objectives": MemoryScope.OBJECTIVES,
+            "artifacts": MemoryScope.ARTIFACTS,
+        }
+
+        memory_scope = scope_mapping.get(req.scope.lower(), MemoryScope.PROJECT)
+
+        # Get project context
+        workspace_path = os.getenv("MCP_WORKSPACE", os.getcwd())
+        project_name = os.path.basename(workspace_path)
+
+        # Set project context if needed
+        if memory_scope == MemoryScope.PROJECT:
             memory_service.set_project(project_name)
 
-        # For now, return dummy results - TODO: implement actual search
-        # This requires hybrid search service integration
-        results = []
+        # Get collection name with proper project ID
+        project_id = project_name if memory_scope == MemoryScope.PROJECT else None
+        collection_name = collection_manager.get_collection_name(
+            memory_scope, project_id
+        )
+        search_results = hybrid_search.search(
+            collection=collection_name,
+            query=req.query,
+            k=req.k,
+            scopes=[req.scope.lower()],
+        )
+
+        # Format results for response
+        results = [
+            {
+                "id": result.get("id"),
+                "score": result.get("score", 0.0),
+                "text": result.get("metadata", {}).get("text", ""),
+                "scope": result.get("scope", req.scope),
+                "metadata": result.get("metadata", {}),
+            }
+            for result in search_results
+        ]
 
         logger.info(
-            "Memory search completed", extra={"extra": {"results_count": len(results)}}
+            "Memory search completed",
+            extra={"extra": {"results_count": len(results)}},
         )
-        return {"results": results, "query": req.query, "scope": req.scope, "k": req.k}
+        return {
+            "results": results,
+            "query": req.query,
+            "scope": req.scope,
+            "k": req.k,
+        }
 
     except Exception as e:
         logger.error("Memory search failed", extra={"extra": {"error": str(e)}})
@@ -328,20 +380,29 @@ async def objective_add(req: ObjectiveAddRequest):
     try:
         logger.info(
             "Adding objective",
-            extra={"extra": {"objective": req.objective, "project": req.project}},
+            extra={
+                "extra": {
+                    "objective": req.objective,
+                    "project": req.project,
+                }
+            },
         )
 
-        # Write objective to memory
+        # Write objective to memory using new multi-scope system
         thread_id = f"objectives_{req.project}"
         memory_service.set_project(req.project)
-        objective_id = memory_service.write_event(
-            scope="objectives",
+
+        # Use the new write_objectives method
+        objective_id = memory_service.write_objectives(
             thread_id=thread_id,
             text=req.objective,
             metadata={"type": "objective", "project": req.project},
         )
 
-        logger.info("Objective added", extra={"extra": {"objective_id": objective_id}})
+        logger.info(
+            "Objective added",
+            extra={"extra": {"objective_id": objective_id}},
+        )
         return {
             "status": "added",
             "objective": req.objective,
@@ -350,7 +411,10 @@ async def objective_add(req: ObjectiveAddRequest):
         }
 
     except Exception as e:
-        logger.error("Failed to add objective", extra={"extra": {"error": str(e)}})
+        logger.error(
+            "Failed to add objective",
+            extra={"extra": {"error": str(e)}},
+        )
         raise HTTPException(status_code=500, detail=f"Add objective failed: {str(e)}")
 
 
@@ -386,10 +450,9 @@ async def write_file(req: WriteFileRequest):
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(req.content)
 
-        # Log to memory
+        # Log to memory using new multi-scope system
         memory_service.set_project(req.project)
-        memory_service.write_event(
-            scope="artifact",
+        memory_service.write_artifacts(
             thread_id=f"files_{req.project}",
             text=f"Created file: {req.file_path}",
             metadata={
@@ -462,6 +525,37 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 
 # --- Server Startup ---
+
+
+async def startup_event():
+    """Initialize memory system on server startup."""
+    try:
+        logger.info("Initializing memory system...")
+
+        # Initialize all collections
+        collection_manager.initialize_all_collections()
+
+        # Seed global knowledge
+        knowledge_seeder.seed_global_knowledge()
+
+        # Verify system health
+        health_status = collection_manager.health_check()
+        logger.info(
+            "Memory system initialized",
+            extra={"extra": {"collections_healthy": health_status}},
+        )
+
+    except Exception as e:
+        logger.error(
+            "Failed to initialize memory system",
+            extra={"extra": {"error": str(e)}},
+        )
+        # Don't fail server startup, but log the issue
+        pass
+
+
+# Add startup event
+app.add_event_handler("startup", startup_event)
 
 if __name__ == "__main__":
     import uvicorn
