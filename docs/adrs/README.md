@@ -21,6 +21,7 @@ This index lists all ADRs for the AutoGen + Qdrant + VS Code MCP project. Each A
 | 014    | Realtime file operations              | Accepted  |
 | 016    | Real-time communication patterns      | Accepted  |
 | 017    | VS Code Extension UI Components       | Accepted  |
+| 018    | Workspace Integration and File Mgmt   | Accepted  |
 
 > ADRs are located in this folder: `docs/adrs/`
 >

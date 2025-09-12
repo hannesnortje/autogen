@@ -74,6 +74,67 @@ export class RealtimeClient {
         }
     }
 
+    /**
+     * Broadcast a message to all connected sessions
+     */
+    broadcast(type: string, data?: any): void {
+        const message: RealtimeMessage = {
+            type,
+            data,
+            session_id: 'broadcast'
+        };
+
+        const messageStr = JSON.stringify(message);
+
+        for (const [sessionId, ws] of this.sockets.entries()) {
+            if (ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(messageStr);
+                } catch (error) {
+                    console.warn(`Failed to send message to session ${sessionId}:`, error);
+                }
+            }
+        }
+
+        // Also emit locally for internal listeners
+        this.emitter.fire(message);
+    }
+
+    /**
+     * Send a message to a specific session
+     */
+    sendToSession(sessionId: string, type: string, data?: any): void {
+        const ws = this.sockets.get(sessionId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message: RealtimeMessage = {
+                type,
+                data,
+                session_id: sessionId
+            };
+
+            try {
+                ws.send(JSON.stringify(message));
+            } catch (error) {
+                console.warn(`Failed to send message to session ${sessionId}:`, error);
+            }
+        }
+    }
+
+    /**
+     * Get the number of active connections
+     */
+    getActiveConnections(): number {
+        return this.sockets.size;
+    }
+
+    /**
+     * Check if a session is connected
+     */
+    isConnected(sessionId: string): boolean {
+        const ws = this.sockets.get(sessionId);
+        return ws ? ws.readyState === WebSocket.OPEN : false;
+    }
+
     dispose(): void {
         for (const id of Array.from(this.sockets.keys())) {
             this.disconnect(id);
