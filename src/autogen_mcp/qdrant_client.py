@@ -106,3 +106,24 @@ class QdrantWrapper:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def scroll(
+        self,
+        collection: str,
+        must: Optional[List[Dict[str, Any]]] = None,
+        limit: int = 100,
+        with_payload: bool = True,
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {
+            "limit": limit,
+            "with_payload": with_payload,
+        }
+        if must:
+            body["filter"] = {"must": must}
+        resp = self.session.post(
+            self._url(f"/collections/{collection}/points/scroll"),
+            json=body,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
