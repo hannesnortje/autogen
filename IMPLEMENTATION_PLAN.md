@@ -143,34 +143,34 @@ Conventions
 ## Step 7 — AutoGen agents scaffolding
 - Branch: `feature/07-agents-gemini-integration`
 - Scope:
-  - [ ] Define agents: Agile, Planner, Architect, Coder, Reviewer, Tester, DevOps, Doc
-  - [ ] Role prompts and defaults (temperature=0 for code/review)
-  - [ ] max_rounds/timeouts per role
-  - [ ] Orchestrator to instantiate agents per project
+  - [x] Define agents: Agile, Planner, Architect, Coder, Reviewer, Tester, DevOps, Doc
+  - [x] Role prompts and defaults (temperature=0 for code/review)
+  - [x] max_rounds/timeouts per role
+  - [x] Orchestrator to instantiate agents per project
 - Acceptance:
-  - [ ] CLI dry-run with mocked LLM (canned responses)
-  - [ ] Agents perform tiered reads and per-turn writes
+  - [x] CLI dry-run with mocked LLM (canned responses)
+  - [x] Agents perform tiered reads and per-turn writes
 - Tests:
-  - [ ] Unit: role configs load and validate
-  - [ ] Integration: orchestrator runs 2–3 rounds with stubs
-  - [ ] Edge: timeouts, cancellation
+  - [x] Unit: role configs load and validate
+  - [x] Integration: orchestrator runs 2–3 rounds with stubs
+  - [x] Edge: timeouts, cancellation
 - Artifacts:
-  - [ ] ADR-006: Agent roles and guardrails
+  - [x] ADR-006: Agent roles and guardrails
 
 ## Step 8 — VS Code MCP server integration
 - Branch: `feature/08-mcp-server`
 - Scope:
-  - [ ] MCP server running in workspace folder
-  - [ ] Commands: start/stop orchestration, memory.search, objective.add
-  - [ ] Minimal VS Code interface wiring
+  - [x] MCP server running in workspace folder
+  - [x] Commands: start/stop orchestration, memory.search, objective.add
+  - [x] Minimal VS Code interface wiring
 - Acceptance:
-  - [ ] From VS Code, start a short session; files written to workspace
-  - [ ] Commands return structured JSON and handle errors
+  - [x] From VS Code, start a short session; files written to workspace
+  - [x] Commands return structured JSON and handle errors
 - Tests:
-  - [ ] Manual: invoke commands, verify effects
-  - [ ] Integration: MCP endpoints → expected responses
+  - [x] Manual: invoke commands, verify effects
+  - [x] Integration: MCP endpoints → expected responses
 - Artifacts:
-  - [ ] ADR-007: MCP endpoints and commands
+  - [x] ADR-007: MCP endpoints and commands
 
 ## Step 9 — Git branching and artifacts
 - Branch: `feature/09-git-workflow`
@@ -258,7 +258,7 @@ Conventions
 - [x] Step 5 — Hybrid search (dense + sparse)
 - [ ] Step 6 — Memory write policies and summarization
 - [x] Step 7 — AutoGen agents scaffolding
-- [ ] Step 8 — VS Code MCP server integration
+- [x] Step 8 — VS Code MCP server integration
 - [ ] Step 9 — Git branching and artifacts
 - [ ] Step 10 — Observability and tracing
 - [ ] Step 11 — Security and data hygiene
@@ -269,3 +269,4 @@ Conventions
 
 ## Change log (append entries as we progress)
 - 2024-06-08: Step 7 (AutoGen agents scaffolding, Gemini integration, CLI) completed and merged from 'feature/07-agents-gemini-integration'.
+- 2025-09-12: Step 8 (VS Code MCP server integration) completed and merged from 'feature/08-mcp-server'.
