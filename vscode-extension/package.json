@@ -44,6 +44,11 @@
         "command": "autogen.showDashboard",
         "title": "Show Dashboard",
         "category": "AutoGen"
+      },
+      {
+        "command": "autogen.checkServerStatus",
+        "title": "Check Server Status",
+        "category": "AutoGen"
       }
     ],
     "views": {

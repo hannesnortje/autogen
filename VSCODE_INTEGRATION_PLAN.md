@@ -47,20 +47,20 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 ### Step 16 — VS Code Extension Scaffold
 - Branch: `feature/16-vscode-extension`
 - Scope:
-  - [ ] Create VS Code extension structure using `yo code`
-  - [ ] Set up TypeScript project with proper dependencies
-  - [ ] Add basic activation and command registration
-  - [ ] Configure extension manifest (package.json)
+  - [x] Create VS Code extension structure using `yo code`
+  - [x] Set up TypeScript project with proper dependencies
+  - [x] Add basic activation and command registration
+  - [x] Configure extension manifest (package.json)
 - Acceptance:
-  - [ ] Extension loads in VS Code development host
-  - [ ] Basic commands appear in command palette
-  - [ ] Extension activates on workspace open
+  - [x] Extension loads in VS Code development host
+  - [x] Basic commands appear in command palette
+  - [x] Extension activates on workspace open
 - Tests:
-  - [ ] Manual: extension loads without errors
-  - [ ] Commands: registered and callable
+  - [x] Manual: extension loads without errors
+  - [x] Commands: registered and callable
 - Artifacts:
-  - [ ] Extension scaffold in `vscode-extension/` directory
-  - [ ] ADR-015: VS Code extension architecture
+  - [x] Extension scaffold in `vscode-extension/` directory
+  - [x] ADR-015: VS Code extension architecture
 
 ### Step 17 — Core Extension Commands
 - Branch: `feature/17-extension-commands`
@@ -184,7 +184,7 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 ## Status Snapshot
 - [x] Step 14 — Connect Real Services to MCP Server
 - [x] Step 15 — Add File Operations and WebSocket Support
-- [ ] Step 16 — VS Code Extension Scaffold
+- [x] Step 16 — VS Code Extension Scaffold
 - [ ] Step 17 — Core Extension Commands
 - [ ] Step 18 — Extension UI Components
 - [ ] Step 19 — WebSocket Integration and Real-time Updates

@@ -31,23 +31,125 @@ export interface ObjectiveRequest {
     project: string;
 }
 
+export interface SessionInfo {
+    session_id: string;
+    project: string;
+    status: string;
+    agents: string[];
+    created_at: string;
+}
+
+export interface StopSessionRequest {
+    session_id: string;
+}
+
+export class McpServerError extends Error {
+    constructor(
+        message: string,
+        public statusCode?: number,
+        public response?: any
+    ) {
+        super(message);
+        this.name = 'McpServerError';
+    }
+}
+
 export class McpClient {
+    private currentSessionId: string | null = null;
+
     constructor(public readonly serverUrl: string) {}
 
+    async isServerAvailable(): Promise<boolean> {
+        try {
+            await this.getHealth();
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    getCurrentSessionId(): string | null {
+        return this.currentSessionId;
+    }
+
+    setCurrentSessionId(sessionId: string | null): void {
+        this.currentSessionId = sessionId;
+    }
+
+    private async makeRequest<T>(
+        endpoint: string,
+        options: RequestInit = {}
+    ): Promise<T> {
+        try {
+            const url = `${this.serverUrl}${endpoint}`;
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers,
+                },
+            });
+
+            if (!response.ok) {
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                try {
+                    const errorBody = await response.json();
+                    if (errorBody.detail) {
+                        errorMessage = errorBody.detail;
+                    } else if (errorBody.message) {
+                        errorMessage = errorBody.message;
+                    }
+                } catch (e) {
+                    // Use default error message if JSON parsing fails
+                }
+                throw new McpServerError(errorMessage, response.status);
+            }
+
+            return await response.json();
+        } catch (error) {
+            if (error instanceof McpServerError) {
+                throw error;
+            }
+            // Handle network errors, timeouts, etc.
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            throw new McpServerError(
+                `Failed to connect to MCP server at ${this.serverUrl}: ${message}`
+            );
+        }
+    }
+
     async startOrchestration(request: OrchestrationRequest): Promise<OrchestrationResponse> {
-        const response = await fetch(`${this.serverUrl}/orchestrate`, {
+        const response = await this.makeRequest<OrchestrationResponse>('/orchestrate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify(request)
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Store the session ID for future operations
+        if (response.session_id) {
+            this.setCurrentSessionId(response.session_id);
         }
 
-        return await response.json();
+        return response;
+    }
+
+    async stopSession(sessionId?: string): Promise<{ status: string; message: string }> {
+        const targetSessionId = sessionId || this.currentSessionId;
+        if (!targetSessionId) {
+            throw new McpServerError('No active session to stop');
+        }
+
+        const request: StopSessionRequest = { session_id: targetSessionId };
+        const response = await this.makeRequest<{ status: string; message: string }>('/orchestrate/stop', {
+            method: 'POST',
+            body: JSON.stringify(request)
+        });
+
+        // Clear current session if we stopped it
+        if (targetSessionId === this.currentSessionId) {
+            this.setCurrentSessionId(null);
+        }
+
+        return response;
     }
 
     async searchMemory(request: MemorySearchRequest): Promise<MemorySearchResponse> {
@@ -57,38 +159,30 @@ export class McpClient {
             k: request.k.toString()
         });
 
-        const response = await fetch(`${this.serverUrl}/memory/search?${params}`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        return await response.json();
+        return await this.makeRequest<MemorySearchResponse>(`/memory/search?${params}`);
     }
 
     async addObjective(request: ObjectiveRequest): Promise<{ status: string }> {
-        const response = await fetch(`${this.serverUrl}/objectives`, {
+        return await this.makeRequest<{ status: string }>('/objectives', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify(request)
         });
+    }
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    async getSessionInfo(sessionId?: string): Promise<SessionInfo> {
+        const targetSessionId = sessionId || this.currentSessionId;
+        if (!targetSessionId) {
+            throw new McpServerError('No session ID provided');
         }
 
-        return await response.json();
+        return await this.makeRequest<SessionInfo>(`/orchestrate/session/${targetSessionId}`);
+    }
+
+    async listSessions(): Promise<SessionInfo[]> {
+        return await this.makeRequest<SessionInfo[]>('/orchestrate/sessions');
     }
 
     async getHealth(): Promise<{ status: string }> {
-        const response = await fetch(`${this.serverUrl}/health`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        return await response.json();
+        return await this.makeRequest<{ status: string }>('/health');
     }
 }
