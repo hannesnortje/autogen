@@ -141,7 +141,7 @@ Conventions
   - [ ] ADR-005: Write policy and thresholds
 
 ## Step 7 — AutoGen agents scaffolding
-- Branch: `feature/07-agents-scaffold`
+- Branch: `feature/07-agents-gemini-integration`
 - Scope:
   - [ ] Define agents: Agile, Planner, Architect, Coder, Reviewer, Tester, DevOps, Doc
   - [ ] Role prompts and defaults (temperature=0 for code/review)
@@ -251,14 +251,13 @@ Conventions
 ---
 
 ## Status Snapshot
-Use this section to mark overall step completion.
 - [x] Step 1 — Bootstrap repository and governance
 - [x] Step 2 — Project scaffold and tooling
 - [x] Step 3 — Qdrant setup and schema
 - [x] Step 4 — Embeddings integration (dense)
 - [x] Step 5 — Hybrid search (dense + sparse)
 - [ ] Step 6 — Memory write policies and summarization
-- [ ] Step 7 — AutoGen agents scaffolding
+- [x] Step 7 — AutoGen agents scaffolding
 - [ ] Step 8 — VS Code MCP server integration
 - [ ] Step 9 — Git branching and artifacts
 - [ ] Step 10 — Observability and tracing
@@ -269,4 +268,4 @@ Use this section to mark overall step completion.
 ---
 
 ## Change log (append entries as we progress)
-- Pending start.
+- 2024-06-08: Step 7 (AutoGen agents scaffolding, Gemini integration, CLI) completed and merged from 'feature/07-agents-gemini-integration'.
