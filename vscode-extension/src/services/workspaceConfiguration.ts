@@ -102,17 +102,22 @@ export class WorkspaceConfiguration {
         const baseConfig = this.getDefaultConfig();
         const template = this.getProjectTemplate(projectInfo.type);
 
+        // Apply project-specific overrides based on project type
+        const projectSpecificConfig = this.getProjectSpecificConfig(projectInfo.type);
+
         // Deep merge template config with base config
-        const mergedConfig = {
+        const mergedConfig: WorkspaceConfig = {
             ...baseConfig,
             ...template.config,
             fileWatching: {
                 ...baseConfig.fileWatching,
-                ...(template.config.fileWatching || {})
+                ...(template.config.fileWatching || {}),
+                ...(projectSpecificConfig.fileWatching || {})
             },
             fileOperations: {
                 ...baseConfig.fileOperations,
-                ...(template.config.fileOperations || {})
+                ...(template.config.fileOperations || {}),
+                ...(projectSpecificConfig.fileOperations || {})
             },
             gitIntegration: {
                 ...baseConfig.gitIntegration,
@@ -133,13 +138,15 @@ export class WorkspaceConfiguration {
     }
 
     /**
-     * Get project template based on type
+     * Get project-specific configuration overrides
      */
-    private getProjectTemplate(projectType: ProjectInfo['type']): ProjectTemplate {
-        const templates: Record<ProjectInfo['type'], ProjectTemplate> = {
-            python: {
-                type: 'python',
-                config: {
+    private getProjectSpecificConfig(projectType: ProjectInfo['type']): {
+        fileWatching?: Partial<FileWatchConfig>;
+        fileOperations?: Partial<FileOperationsConfig>;
+    } {
+        switch (projectType) {
+            case 'python':
+                return {
                     fileWatching: {
                         watchedExtensions: ['.py', '.md', '.txt', '.yaml', '.yml', '.json'],
                         ignorePatterns: [
@@ -148,21 +155,15 @@ export class WorkspaceConfiguration {
                             '**/env/**',
                             '**/.pytest_cache/**'
                         ],
-                        autoSyncToMemory: true,
-                        batchUpdates: true,
                         batchDelay: 1500
-                    } as Partial<FileWatchConfig>,
+                    },
                     fileOperations: {
                         allowedExtensions: ['.py', '.md', '.txt', '.yaml', '.yml', '.json'],
                         restrictedPaths: ['__pycache__', 'venv', 'env', '.pytest_cache']
-                    } as Partial<FileOperationsConfig>
-                },
-                requiredFiles: ['requirements.txt', 'pyproject.toml', 'setup.py'],
-                suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
-            },
-            typescript: {
-                type: 'typescript',
-                config: {
+                    }
+                };
+            case 'typescript':
+                return {
                     fileWatching: {
                         watchedExtensions: ['.ts', '.js', '.json', '.md', '.yaml', '.yml'],
                         ignorePatterns: [
@@ -176,13 +177,9 @@ export class WorkspaceConfiguration {
                         allowedExtensions: ['.ts', '.js', '.json', '.md', '.yaml', '.yml', '.html', '.css'],
                         restrictedPaths: ['node_modules', 'dist', 'build']
                     }
-                },
-                requiredFiles: ['package.json', 'tsconfig.json'],
-                suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
-            },
-            javascript: {
-                type: 'javascript',
-                config: {
+                };
+            case 'javascript':
+                return {
                     fileWatching: {
                         watchedExtensions: ['.js', '.json', '.md', '.yaml', '.yml'],
                         ignorePatterns: [
@@ -196,13 +193,9 @@ export class WorkspaceConfiguration {
                         allowedExtensions: ['.js', '.json', '.md', '.yaml', '.yml', '.html', '.css'],
                         restrictedPaths: ['node_modules', 'dist', 'build']
                     }
-                },
-                requiredFiles: ['package.json'],
-                suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
-            },
-            mixed: {
-                type: 'mixed',
-                config: {
+                };
+            case 'mixed':
+                return {
                     fileWatching: {
                         watchedExtensions: ['.py', '.ts', '.js', '.json', '.md', '.yaml', '.yml'],
                         ignorePatterns: [
@@ -218,6 +211,45 @@ export class WorkspaceConfiguration {
                         allowedExtensions: ['.py', '.ts', '.js', '.json', '.md', '.yaml', '.yml', '.html', '.css'],
                         restrictedPaths: ['node_modules', '__pycache__', 'dist', 'build', 'venv']
                     }
+                };
+            default:
+                return {};
+        }
+    }
+
+    /**
+     * Get project template based on type
+     */
+    private getProjectTemplate(projectType: ProjectInfo['type']): ProjectTemplate {
+        const templates: Record<ProjectInfo['type'], ProjectTemplate> = {
+            python: {
+                type: 'python',
+                config: {
+                    // Only specify the fields we want to override
+                },
+                requiredFiles: ['requirements.txt', 'pyproject.toml', 'setup.py'],
+                suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
+            },
+            typescript: {
+                type: 'typescript',
+                config: {
+                    // Only specify the fields we want to override
+                },
+                requiredFiles: ['package.json', 'tsconfig.json'],
+                suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
+            },
+            javascript: {
+                type: 'javascript',
+                config: {
+                    // Only specify the fields we want to override
+                },
+                requiredFiles: ['package.json'],
+                suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
+            },
+            mixed: {
+                type: 'mixed',
+                config: {
+                    // Only specify the fields we want to override
                 },
                 suggestedStructure: ['src/', 'tests/', 'docs/', 'README.md']
             },

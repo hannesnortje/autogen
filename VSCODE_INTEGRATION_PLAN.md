@@ -148,11 +148,181 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
   - [x] Complete workspace integration
   - [x] ADR-017: Workspace and file management
 
-## Phase 4: Polish and Distribution
+## Phase 4: Memory System Integration (Critical Priority)
+**Goal**: Fix the broken memory integration identified in the Qdrant analysis - this is essential for agents to function properly.
+
+### Step 21 — Fix Multi-Scope Memory Schema
+- Branch: `feature/21-memory-schema-fix`
+- Scope:
+  - [ ] Define proper collection schemas for each scope (global, project, agent, thread, objectives, artifacts)
+  - [ ] Implement structured payload schemas with proper metadata
+  - [ ] Create collection initialization with pre-seeded global knowledge
+  - [ ] Add PDCA, OOP principles, coding standards to global collection
+- Acceptance:
+  - [ ] Each scope has dedicated collection with structured schema
+  - [ ] Global collection contains reusable knowledge (PDCA, OOP, security rules)
+  - [ ] Agent collection stores preferences and capabilities
+  - [ ] Artifacts collection links to commits, PRs, builds
+- Tests:
+  - [ ] Integration: all collections created with correct schemas
+  - [ ] Unit: structured payload validation
+  - [ ] E2E: cross-scope memory retrieval
+- Artifacts:
+  - [ ] Complete memory schema redesign
+  - [ ] ADR-018: Multi-scope memory architecture
+
+### Step 22 — Fix Memory Search Implementation
+- Branch: `feature/22-memory-search-fix`
+- Scope:
+  - [ ] Replace dummy search with real HybridSearchService integration
+  - [ ] Implement tiered search (thread → project → objectives → agent → global)
+  - [ ] Connect MCP server `/memory/search` to working search
+  - [ ] Add proper scope filtering and result ranking
+- Acceptance:
+  - [ ] Memory search returns actual results from Qdrant
+  - [ ] Tiered search respects scope priority order
+  - [ ] VS Code extension gets real search results
+  - [ ] Search works across all scope types
+- Tests:
+  - [ ] Integration: MCP server search returns real results
+  - [ ] Unit: tiered search logic and scope filtering
+  - [ ] E2E: VS Code extension → server → Qdrant → results
+- Artifacts:
+  - [ ] Working memory search system
+  - [ ] ADR-019: Memory search implementation
+
+### Step 23 — Agent Memory Integration
+- Branch: `feature/23-agent-memory-integration`
+- Scope:
+  - [ ] Add memory search hooks to AutoGen agent workflows
+  - [ ] Implement per-turn memory writing (decisions, snippets, artifacts)
+  - [ ] Create agent-specific memory collections and preferences
+  - [ ] Add memory-aware agent initialization
+- Acceptance:
+  - [ ] Agents search memory before taking actions
+  - [ ] Agent decisions and outputs are written to memory
+  - [ ] Agents retain context between sessions
+  - [ ] Each agent type has persistent knowledge
+- Tests:
+  - [ ] Integration: agent workflow with memory reads/writes
+  - [ ] Unit: memory hooks in agent lifecycle
+  - [ ] E2E: multi-session agent learning
+- Artifacts:
+  - [ ] Memory-aware AutoGen agents
+  - [ ] ADR-020: Agent memory integration patterns
+
+### Step 24 — Knowledge Seeding and Management
+- Branch: `feature/24-knowledge-management`
+- Scope:
+  - [ ] Pre-populate global collection with coding standards
+  - [ ] Add security rules and best practices to global memory
+  - [ ] Implement automatic thread summarization triggers
+  - [ ] Add importance-based memory pruning
+  - [ ] Create knowledge export/import functionality
+- Acceptance:
+  - [ ] Global memory contains useful coding knowledge
+  - [ ] Thread summarization happens automatically every 20-30 turns
+  - [ ] Low-importance memories are pruned automatically
+  - [ ] Knowledge can be exported and imported between projects
+- Tests:
+  - [ ] Integration: knowledge seeding on system startup
+  - [ ] Unit: summarization triggers and pruning logic
+  - [ ] Manual: knowledge export/import workflows
+- Artifacts:
+  - [ ] Complete knowledge management system
+  - [ ] ADR-021: Knowledge seeding and management
+
+## Phase 5: Advanced Memory Features
+**Goal**: Add sophisticated memory capabilities for enhanced agent performance.
+
+### Step 25 — Artifact Memory Integration
+- Branch: `feature/25-artifact-memory`
+- Scope:
+  - [ ] Link memory events to Git commits and PRs
+  - [ ] Store build reports and test results in artifacts collection
+  - [ ] Add code review feedback to memory
+  - [ ] Implement artifact-based learning patterns
+- Acceptance:
+  - [ ] Memory events linked to specific commits/PRs
+  - [ ] Build results influence agent decisions
+  - [ ] Code review patterns stored and reused
+  - [ ] Agents learn from deployment outcomes
+- Tests:
+  - [ ] Integration: Git hooks → memory storage
+  - [ ] Unit: artifact linking and retrieval
+  - [ ] E2E: artifact-based agent improvements
+- Artifacts:
+  - [ ] Complete artifact memory system
+  - [ ] ADR-022: Artifact memory integration
+
+### Step 26 — Cross-Project Memory Learning
+- Branch: `feature/26-cross-project-learning`
+- Scope:
+  - [ ] Implement global pattern recognition across projects
+  - [ ] Add solution reuse from previous projects
+  - [ ] Create project similarity matching
+  - [ ] Add best practice propagation
+- Acceptance:
+  - [ ] Agents leverage solutions from similar projects
+  - [ ] Global patterns influence project-specific decisions
+  - [ ] Best practices automatically propagate
+  - [ ] Solution reuse reduces development time
+- Tests:
+  - [ ] Integration: cross-project pattern matching
+  - [ ] Unit: similarity algorithms and reuse logic
+  - [ ] E2E: new project benefits from existing knowledge
+- Artifacts:
+  - [ ] Cross-project learning system
+  - [ ] ADR-023: Cross-project memory patterns
+
+## Phase 6: Memory System Enhancement
+**Goal**: Add advanced memory capabilities and optimization.
+
+### Step 27 — Memory Analytics and Optimization
+- Branch: `feature/27-memory-analytics`
+- Scope:
+  - [ ] Add memory usage analytics and metrics
+  - [ ] Implement intelligent memory pruning algorithms
+  - [ ] Create memory health monitoring
+  - [ ] Add performance optimization for large datasets
+- Acceptance:
+  - [ ] Memory system performance monitored and optimized
+  - [ ] Intelligent pruning maintains relevance
+  - [ ] Memory health alerts for capacity issues
+  - [ ] System scales to large knowledge bases
+- Tests:
+  - [ ] Performance: large dataset handling
+  - [ ] Unit: pruning algorithms and metrics
+  - [ ] Integration: monitoring and alerting
+- Artifacts:
+  - [ ] Memory analytics system
+  - [ ] ADR-024: Memory optimization strategies
+
+### Step 28 — VS Code Memory Enhancement UI
+- Branch: `feature/28-memory-ui-enhancement`
+- Scope:
+  - [ ] Add advanced memory visualization in VS Code
+  - [ ] Create interactive memory exploration tools
+  - [ ] Implement memory relationship graphs
+  - [ ] Add memory debugging capabilities
+- Acceptance:
+  - [ ] Rich memory visualization in VS Code
+  - [ ] Interactive exploration of knowledge graphs
+  - [ ] Visual memory relationship mapping
+  - [ ] Debugging tools for memory issues
+- Tests:
+  - [ ] UI: memory visualization components
+  - [ ] Integration: VS Code memory tools
+  - [ ] Manual: user experience workflows
+- Artifacts:
+  - [ ] Enhanced memory UI components
+  - [ ] ADR-025: Memory visualization architecture
+
+## Phase 7: Polish and Distribution
 **Goal**: Prepare extension for distribution and production use.
 
-### Step 21 — Extension Testing and Packaging
-- Branch: `feature/21-extension-packaging`
+### Step 29 — Extension Testing and Packaging
+- Branch: `feature/29-extension-packaging`
 - Scope:
   - [ ] Add comprehensive extension tests
   - [ ] Configure CI/CD for extension builds
@@ -168,10 +338,10 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
   - [ ] E2E: manual testing scenarios
 - Artifacts:
   - [ ] Packaged VSIX file
-  - [ ] ADR-018: Extension testing and distribution
+  - [ ] ADR-026: Extension testing and distribution
 
-### Step 22 — Documentation and User Guide
-- Branch: `feature/22-integration-docs`
+### Step 30 — Documentation and User Guide
+- Branch: `feature/30-integration-docs`
 - Scope:
   - [ ] Update main README with VS Code integration guide
   - [ ] Create extension user guide and tutorials
@@ -186,7 +356,7 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
   - [ ] Docs: links and examples work
 - Artifacts:
   - [ ] Complete integration documentation
-  - [ ] ADR-019: Integration documentation strategy
+  - [ ] ADR-027: Integration documentation strategy
 
 ---
 
@@ -198,8 +368,16 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 - [x] Step 18 — Extension UI Components
 - [x] Step 19 — WebSocket Integration and Real-time Updates
 - [x] Step 20 — Workspace Integration and File Operations
-- [ ] Step 21 — Extension Testing and Packaging
-- [ ] Step 22 — Documentation and User Guide
+- [ ] **Step 21 — Fix Multi-Scope Memory Schema (CRITICAL)**
+- [ ] **Step 22 — Fix Memory Search Implementation (CRITICAL)**
+- [ ] **Step 23 — Agent Memory Integration (CRITICAL)**
+- [ ] Step 24 — Knowledge Seeding and Management
+- [ ] Step 25 — Artifact Memory Integration
+- [ ] Step 26 — Cross-Project Memory Learning
+- [ ] Step 27 — Memory Analytics and Optimization
+- [ ] Step 28 — VS Code Memory Enhancement UI
+- [ ] Step 29 — Extension Testing and Packaging
+- [ ] Step 30 — Documentation and User Guide
 
 ---
 
@@ -230,7 +408,56 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 
 ## Future Recommendations
 
-### Enhancements for Step 19 (WebSocket/Real-time)
+## Future Recommendations
+
+### Critical Memory System Requirements (Steps 21-23)
+- **Schema Redesign**: Replace single generic collection with proper multi-scope collections
+- **Global Knowledge**: Pre-seed with PDCA, OOP principles, coding standards, security rules
+- **Search Implementation**: Connect MCP server to actual HybridSearchService (currently returns empty results)
+- **Agent Hooks**: Add memory read/write to AutoGen agent workflows
+- **Tiered Search**: Implement thread → project → objectives → agent → global search order
+- **Context Retention**: Enable agents to learn from previous sessions
+
+### Memory Integration Architecture (Phase 4)
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Global        │    │   Project       │    │   Agent         │
+│   Collection    │    │   Collection    │    │   Collection    │
+│                 │    │                 │    │                 │
+│ • PDCA, OOP     │    │ • ADRs, APIs    │    │ • Preferences   │
+│ • Standards     │    │ • Known Issues  │    │ • Capabilities  │
+│ • Security      │    │ • Decisions     │    │ • Learning      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   Hybrid Search │
+                    │   Service       │
+                    │                 │
+                    │ • Tiered Order  │
+                    │ • Dense+Sparse  │
+                    │ • Scope Filter  │
+                    └─────────────────┘
+                                 │
+                    ┌─────────────────┐
+                    │   AutoGen       │
+                    │   Agents        │
+                    │                 │
+                    │ • Memory Hooks  │
+                    │ • Context Aware │
+                    │ • Learning      │
+                    └─────────────────┘
+```
+
+### Enhanced Memory Features (Steps 24-28)
+- **Knowledge Management**: Automatic summarization, intelligent pruning, export/import
+- **Artifact Integration**: Link memory to Git commits, PRs, build reports, test results
+- **Cross-Project Learning**: Pattern recognition and solution reuse across projects
+- **Memory Analytics**: Usage metrics, performance optimization, health monitoring
+- **Advanced UI**: Memory visualization, relationship graphs, debugging tools
+
+### Extension Architecture Improvements
 - **WebSocket Robustness**: Add reconnection logic with exponential backoff for better resilience against network issues
 - **Live Status Indicators**: Add visual "Live" badges in session dashboards and status bar to indicate active WebSocket connections
 - **Progress Detail Display**: Show specific `progress_step` values and timestamps in dashboard UI, not just trigger refreshes
@@ -270,5 +497,21 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 
 ---
 
-## Next Steps
-Ready to begin Step 20: Workspace Integration and File Operations. This will build on the real-time foundation established in Step 19.
+## Next Steps (Updated Priority Order)
+
+**CRITICAL: Memory System Repair Required**
+
+Based on the Qdrant memory analysis, the system has fundamental memory integration issues that prevent agents from functioning properly. The next three steps are **critical priority**:
+
+1. **Step 21 — Fix Multi-Scope Memory Schema**: Agents need proper memory collections to store and retrieve knowledge
+2. **Step 22 — Fix Memory Search Implementation**: Currently returns empty results - agents can't access any memory
+3. **Step 23 — Agent Memory Integration**: Agents must be connected to the memory system to learn and improve
+
+**Current Issue**: Agents are "forgetful" because:
+- Memory search returns empty results (broken implementation)
+- No structured knowledge storage (missing schema)
+- Agents don't read/write memory (no integration)
+
+**Impact**: Without fixing these, agents start every session with zero knowledge and can't learn from previous work.
+
+Ready to begin **Step 21: Fix Multi-Scope Memory Schema** - the foundation for all agent memory functionality.

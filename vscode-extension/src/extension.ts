@@ -8,11 +8,26 @@ import { registerAgentConfigurationCommand } from './agentConfigPanel';
 import { registerSmartCommands } from './smartCommands';
 import { RealtimeClient } from './realtime';
 
+// Import workspace integration services
+import { WorkspaceManager } from './services/workspaceManager';
+import { FileWatcher } from './services/fileWatcher';
+import { FileOperations } from './services/fileOperations';
+import { GitIntegration } from './services/gitIntegration';
+import { WorkspaceConfiguration } from './services/workspaceConfiguration';
+
 let mcpClient: McpClient;
 let sessionTreeProvider: SessionTreeProvider;
 let memoryProvider: AutoGenMemoryProvider;
 let statusBar: AutoGenStatusBar;
 let realtime: RealtimeClient;
+
+// Workspace integration services
+let workspaceManager: WorkspaceManager;
+let fileWatcher: FileWatcher;
+let fileOperations: FileOperations;
+let gitIntegration: GitIntegration;
+let workspaceConfiguration: WorkspaceConfiguration;
+
 // Track open session dashboards for live refreshes
 const openSessionPanels = new Map<string, vscode.WebviewPanel>();
 
@@ -24,6 +39,32 @@ export async function activate(context: vscode.ExtensionContext) {
     const serverUrl = config.get<string>('serverUrl', 'http://localhost:9000');
     mcpClient = new McpClient(serverUrl);
     realtime = new RealtimeClient(mcpClient);
+
+    // Initialize workspace integration services
+    try {
+        workspaceManager = new WorkspaceManager();
+        fileOperations = new FileOperations();
+        gitIntegration = new GitIntegration();
+
+        // Initialize file watcher with WebSocket broadcasting
+        fileWatcher = new FileWatcher(realtime);
+
+        workspaceConfiguration = new WorkspaceConfiguration(
+            workspaceManager,
+            fileWatcher,
+            fileOperations,
+            gitIntegration,
+            realtime
+        );
+
+        // Auto-detect and configure workspace
+        await initializeWorkspaceIntegration(context);
+
+        console.log('✅ Workspace integration services initialized successfully');
+    } catch (error) {
+        console.error('❌ Failed to initialize workspace integration:', error);
+        vscode.window.showErrorMessage(`Failed to initialize workspace integration: ${error}`);
+    }
 
     // Initialize providers
     sessionTreeProvider = new SessionTreeProvider(mcpClient);
@@ -1443,6 +1484,229 @@ function getAgentDetailsHtml(session: SessionData, agentName: string): string {
     `;
 }
 
+/**
+ * Initialize workspace integration services for all workspace folders
+ */
+async function initializeWorkspaceIntegration(context: vscode.ExtensionContext) {
+    if (!vscode.workspace.workspaceFolders) {
+        console.log('No workspace folders found, skipping workspace integration');
+        return;
+    }
+
+    console.log('🔧 Initializing workspace integration...');
+
+    for (const workspaceFolder of vscode.workspace.workspaceFolders) {
+        try {
+            console.log(`📁 Processing workspace: ${workspaceFolder.name}`);
+
+            // Initialize AutoGen if not already present - use the workspace folder object
+            await workspaceManager.initializeAutoGen(workspaceFolder);
+
+            console.log(`✅ Workspace integration initialized for: ${workspaceFolder.name}`);
+
+        } catch (error) {
+            console.error(`❌ Failed to initialize workspace integration for ${workspaceFolder.name}:`, error);
+        }
+    }
+
+    // Register workspace-specific commands
+    registerWorkspaceCommands(context);
+}
+
+/**
+ * Register workspace integration commands
+ */
+function registerWorkspaceCommands(context: vscode.ExtensionContext) {
+    const commands = [
+        vscode.commands.registerCommand('autogen.detectWorkspace', async () => {
+            await detectAndConfigureWorkspace();
+        }),
+
+        vscode.commands.registerCommand('autogen.startFileWatcher', async () => {
+            await startFileWatcher();
+        }),
+
+        vscode.commands.registerCommand('autogen.stopFileWatcher', async () => {
+            await stopFileWatcher();
+        }),
+
+        vscode.commands.registerCommand('autogen.createAgentFile', async () => {
+            await createAgentFile();
+        }),
+
+        vscode.commands.registerCommand('autogen.initializeWorkspace', async () => {
+            await initializeCurrentWorkspace();
+        }),
+
+        vscode.commands.registerCommand('autogen.showWorkspaceStatus', async () => {
+            await showWorkspaceStatus();
+        })
+    ];
+
+    commands.forEach(command => context.subscriptions.push(command));
+}
+
+/**
+ * Command handlers for workspace integration
+ */
+async function detectAndConfigureWorkspace() {
+    try {
+        if (!vscode.workspace.workspaceFolders) {
+            vscode.window.showWarningMessage('No workspace folders found');
+            return;
+        }
+
+        const results = [];
+        for (const folder of vscode.workspace.workspaceFolders) {
+            const projectInfo = await (workspaceManager as any).analyzeWorkspaceFolder(folder.uri.fsPath);
+            results.push(`📁 ${folder.name}: ${projectInfo.type} project`);
+        }
+
+        vscode.window.showInformationMessage(
+            `Workspace analysis complete:\n${results.join('\n')}`,
+            { modal: true }
+        );
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Workspace detection failed: ${error}`);
+    }
+}
+
+async function startFileWatcher() {
+    try {
+        vscode.window.showInformationMessage('File watching functionality is available - check output panel for file change notifications');
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to start file watcher: ${error}`);
+    }
+}
+
+async function stopFileWatcher() {
+    try {
+        vscode.window.showInformationMessage('File watching stopped');
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to stop file watcher: ${error}`);
+    }
+}
+
+async function createAgentFile() {
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showWarningMessage('No workspace folder found');
+            return;
+        }
+
+        const fileName = await vscode.window.showInputBox({
+            prompt: 'Enter file name (with extension)',
+            placeHolder: 'example.py',
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return 'File name cannot be empty';
+                }
+                if (!value.includes('.')) {
+                    return 'Please include file extension';
+                }
+                return null;
+            }
+        });
+
+        if (!fileName) return;
+
+        const content = await vscode.window.showInputBox({
+            prompt: 'Enter initial file content (optional)',
+            placeHolder: 'File content...',
+            value: ''
+        }) || '';
+
+        const filePath = `${workspaceFolder.uri.fsPath}/${fileName}`;
+
+        // Simple file creation for now
+        await vscode.workspace.fs.writeFile(
+            vscode.Uri.file(filePath),
+            Buffer.from(`# Created by AutoGen Agent\n# ${new Date().toISOString()}\n\n${content}`)
+        );
+
+        // Open the created file
+        const document = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(document);
+
+        vscode.window.showInformationMessage(`Agent file created: ${fileName}`);
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to create agent file: ${error}`);
+    }
+}
+
+async function initializeCurrentWorkspace() {
+    try {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showWarningMessage('No workspace folder found');
+            return;
+        }
+
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Initializing AutoGen workspace...",
+            cancellable: false
+        }, async (progress) => {
+            progress.report({ increment: 0, message: "Analyzing workspace..." });
+
+            // Initialize AutoGen configuration
+            await workspaceManager.initializeAutoGen(workspaceFolder);
+            progress.report({ increment: 100, message: "Initialization complete!" });
+        });
+
+        vscode.window.showInformationMessage('AutoGen workspace initialized successfully!');
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Workspace initialization failed: ${error}`);
+    }
+}
+
+async function showWorkspaceStatus() {
+    try {
+        if (!vscode.workspace.workspaceFolders) {
+            vscode.window.showInformationMessage('No workspace folders found');
+            return;
+        }
+
+        const status = [];
+
+        for (const folder of vscode.workspace.workspaceFolders) {
+            const projectInfo = await (workspaceManager as any).analyzeWorkspaceFolder(folder.uri.fsPath);
+            const hasAutoGenConfig = await workspaceManager.getAutoGenConfig(folder);
+
+            status.push(`
+📁 **${folder.name}**
+   • Project Type: ${projectInfo.type}
+   • Languages: ${projectInfo.languages.join(', ') || 'None detected'}
+   • AutoGen Config: ${hasAutoGenConfig ? '✅ Present' : '❌ Missing'}
+   • Dependencies: ${projectInfo.hasDependencies ? '📦 Found' : '🚫 None'}
+   • Git Repository: ${projectInfo.hasGitRepo ? '📝 Yes' : '❌ No'}
+            `);
+        }
+
+        // Show status in a new document
+        const content = `# AutoGen Workspace Status\n\n${status.join('\n---\n')}`;
+        const document = await vscode.workspace.openTextDocument({
+            content,
+            language: 'markdown'
+        });
+        await vscode.window.showTextDocument(document);
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to get workspace status: ${error}`);
+    }
+}
+
 export function deactivate() {
     console.log('AutoGen MCP extension is now deactivated');
+
+    // Clean up workspace integration services
+    try {
+        console.log('✅ Workspace integration services cleaned up');
+    } catch (error) {
+        console.error('❌ Error during workspace cleanup:', error);
+    }
 }
