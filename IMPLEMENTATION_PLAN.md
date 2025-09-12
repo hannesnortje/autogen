@@ -20,7 +20,7 @@ Conventions
 ## Prerequisites
 - [ ] Poetry installed and configured
 - [ ] Docker available to run Qdrant locally
-- [ ] GitHub remote set up with push access
+- [x] GitHub remote set up with push access
 - [ ] VS Code installed with Python, Docker extensions (optional)
 - [ ] Cloud LLM credentials configured via environment variables (secrets not committed)
 
@@ -43,8 +43,8 @@ Conventions
 - Scope:
   - [ ] Initialize repo structure (src/, tests/, docs/, .github/)
   - [x] Add LICENSE, README, CODEOWNERS, pull request template
-  - [ ] Add .gitignore (Python/Poetry/VS Code)
-  - [ ] Configure default branch `main` and GitHub remote
+  - [x] Add .gitignore (Python/Poetry/VS Code)
+  - [x] Configure default branch `main` and GitHub remote
   - [x] Document Poetry usage in README (install, env, run tests)
 - Acceptance:
   - [ ] Clean initial repo; README outlines goals/architecture/workflow and Poetry usage
@@ -58,18 +58,18 @@ Conventions
 ## Step 2 — Project scaffold and tooling (Poetry)
 - Branch: `feature/02-scaffold-tooling`
 - Scope:
-  - [ ] Create `pyproject.toml` (Poetry) with deps: ruff, black, mypy, pytest, pre-commit
-  - [ ] Set up `src/` layout with minimal CLI entry (e.g., `autogen_mcp/cli.py`)
-  - [ ] Configure pre-commit hooks (black, ruff, end-of-file-fixer, trailing-whitespace)
-  - [ ] Basic pytest structure in `tests/` and typechecking config
+  - [x] Create `pyproject.toml` (Poetry) with deps: ruff, black, mypy, pytest, pre-commit
+  - [x] Set up `src/` layout with minimal CLI entry (e.g., `autogen_mcp/cli.py`)
+  - [x] Configure pre-commit hooks (black, ruff, end-of-file-fixer, trailing-whitespace)
+  - [x] Basic pytest structure in `tests/` and typechecking config
 - Acceptance:
-  - [ ] Poetry install succeeds; `pytest` runs and passes
-  - [ ] Ruff/Black/Mypy clean on scaffold
-  - [ ] Pre-commit prevents formatting/lint violations locally
+  - [x] Poetry install succeeds; `pytest` runs and passes
+  - [x] Ruff/Black/Mypy clean on scaffold
+  - [x] Pre-commit prevents formatting/lint violations locally
 - Tests:
-  - [ ] Unit: trivial test passes
-  - [ ] Lint: ruff clean
-  - [ ] Typecheck: mypy clean
+  - [x] Unit: trivial test passes
+  - [x] Lint: ruff clean
+  - [x] Typecheck: mypy clean
 - Artifacts:
   - [ ] ADR-001: Tooling decisions and versions
 

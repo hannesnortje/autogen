@@ -30,6 +30,24 @@ This repository implements an AutoGen multi-agent workflow with Qdrant-backed me
    docker compose up -d
    ```
 
+## Configuration
+1) Create a local `.env` by copying `.env.example` and filling in values. Do not commit `.env`.
+   - GEMINI_API_KEY: provide only when we reach Step 7 (agents) to enable live LLM calls. Until then, we run with mocked LLMs.
+   - QDRANT_URL / QDRANT_API_KEY: set based on your local or remote Qdrant instance.
+
+2) Check Qdrant is running (after Step 3):
+   - Open http://localhost:6333/ in a browser or:
+   ```bash
+   curl -s http://localhost:6333/collections | jq . | head -n 20
+   ```
+   - If it responds with JSON, Qdrant is up.
+
+3) Confirm Poetry environment:
+   ```bash
+   poetry --version
+   poetry run python -V
+   ```
+
 ## Development workflow
 - One step per feature branch, conventional commits, PR checks required.
 - See `IMPLEMENTATION_PLAN.md` for the detailed step plan and checkboxes.
