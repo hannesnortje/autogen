@@ -65,20 +65,21 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 ### Step 17 — Core Extension Commands
 - Branch: `feature/17-extension-commands`
 - Scope:
-  - [ ] Implement `autogen.startSession` command
-  - [ ] Implement `autogen.stopSession` command
-  - [ ] Implement `autogen.searchMemory` command
-  - [ ] Add HTTP client for MCP server communication
+  - [x] Implement `autogen.startSession` command
+  - [x] Implement `autogen.stopSession` command
+  - [x] Implement `autogen.searchMemory` command
+  - [x] Add HTTP client for MCP server communication
 - Acceptance:
-  - [ ] Commands successfully call MCP server endpoints
-  - [ ] Results displayed in VS Code (output panel or notifications)
-  - [ ] Error handling for server unavailable
+  - [x] Commands successfully call MCP server endpoints
+  - [x] Results displayed in VS Code (output panel or notifications)
+  - [x] Error handling for server unavailable
 - Tests:
-  - [ ] Unit: HTTP client functions
-  - [ ] Integration: command → server → response flow
+  - [x] Unit: HTTP client functions
+  - [x] Integration: command → server → response flow
 - Artifacts:
-  - [ ] Working extension commands
-  - [ ] Server communication layer
+  - [x] Working extension commands
+  - [x] Server communication layer
+  - [x] ADR-016: Core extension commands architecture
 
 ### Step 18 — Extension UI Components
 - Branch: `feature/18-extension-ui`
@@ -185,7 +186,7 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 - [x] Step 14 — Connect Real Services to MCP Server
 - [x] Step 15 — Add File Operations and WebSocket Support
 - [x] Step 16 — VS Code Extension Scaffold
-- [ ] Step 17 — Core Extension Commands
+- [x] Step 17 — Core Extension Commands
 - [ ] Step 18 — Extension UI Components
 - [ ] Step 19 — WebSocket Integration and Real-time Updates
 - [ ] Step 20 — Workspace Integration and File Operations
