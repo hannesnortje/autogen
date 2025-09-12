@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "autogen-mcp"
+version = "0.1.0"
+description = "AutoGen multi-agent workflow with Qdrant memory and VS Code MCP integration."
+authors = ["hannesnortje <your@email.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+black = "^24.0.0"
+ruff = "^0.4.0"
+mypy = "^1.8.0"
+pre-commit = "^3.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
