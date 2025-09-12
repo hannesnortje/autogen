@@ -1,0 +1,110 @@
+{
+  "name": "autogen-mcp",
+  "displayName": "AutoGen MCP",
+  "description": "AutoGen Model Context Protocol integration for VS Code",
+  "version": "0.1.0",
+  "publisher": "autogen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/autogen/autogen-mcp.git"
+  },
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "autogen.startSession",
+        "title": "Start AutoGen Session",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.stopSession",
+        "title": "Stop AutoGen Session",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.searchMemory",
+        "title": "Search Memory",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.addObjective",
+        "title": "Add Objective",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.showDashboard",
+        "title": "Show Dashboard",
+        "category": "AutoGen"
+      }
+    ],
+    "views": {
+      "autogen": [
+        {
+          "id": "autogen.sessionView",
+          "name": "Sessions",
+          "when": "true"
+        },
+        {
+          "id": "autogen.memoryView",
+          "name": "Memory",
+          "when": "true"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "autogen",
+          "title": "AutoGen",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AutoGen MCP",
+      "properties": {
+        "autogen.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:9000",
+          "description": "URL of the AutoGen MCP server"
+        },
+        "autogen.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start MCP server when extension activates"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^16.18.126",
+    "@types/vscode": "^1.104.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
+    "glob": "^11.0.3",
+    "mocha": "^11.7.2",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@types/ws": "^8.5.0",
+    "ws": "^8.14.0"
+  }
+}
