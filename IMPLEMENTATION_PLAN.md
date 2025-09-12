@@ -221,17 +221,17 @@ Artifacts:
 ## Step 12 — CI/CD pipelines and schedules
 - Branch: `feature/12-ci`
 - Scope:
-  - [ ] GitHub Actions: lint, typecheck, unit/integration
-  - [ ] Qdrant service container for tests
-  - [ ] Nightly summarization scheduled workflow
+  - [x] GitHub Actions: lint, typecheck, unit/integration
+  - [x] Qdrant service container for tests
+  - [x] Nightly summarization scheduled workflow
 - Acceptance:
-  - [ ] PRs require passing checks before merge
-  - [ ] Nightly job runs summarizer and writes to memory
+  - [x] PRs require passing checks before merge
+  - [x] Nightly job runs summarizer and writes to memory
 - Tests:
-  - [ ] Matrix job runs on push/PR
-  - [ ] Cron triggers and updates memory artifacts
+  - [x] Matrix job runs on push/PR
+  - [x] Cron triggers and updates memory artifacts
 - Artifacts:
-  - [ ] ADR-011: CI/CD architecture
+  - [x] ADR-011: CI/CD architecture
 
 ## Step 13 — Docs and minimal dashboard
 - Branch: `feature/13-docs-dashboard`
@@ -273,4 +273,6 @@ Artifacts:
 - 2025-09-12: Step 8 (VS Code MCP server integration) completed and merged from 'feature/08-mcp-server'.
 - 2025-09-12: Step 9 (Git workflow automation, PR/commit/CI artifact linkage) completed and merged from 'feature/09-git-workflow'.
 
+
 2025-09-12: Step 11 (Security and data hygiene: secret redaction in logs/memory, outbound call/domain allowlist, payload filters for secrets, unit/integration/E2E tests) completed and merged from 'feature/11-security'.
+2025-09-12: Step 12 (CI/CD pipelines, Qdrant service, nightly summarization, required checks, ADR-011) completed and merged from 'feature/12-ci'.

@@ -1,0 +1,83 @@
+# GitHub Actions CI for AutoGen MCP
+# Lint, typecheck, unit/integration tests, Qdrant service, and nightly summarization
+
+name: CI
+
+on:
+  push:
+    branches: [main, feature/**]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Nightly at 2am UTC
+
+jobs:
+  lint-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: abatilo/actions-poetry@v3
+      - name: Install dependencies
+        run: poetry install
+      - name: Lint (ruff)
+        run: poetry run ruff .
+      - name: Format (black)
+        run: poetry run black --check .
+      - name: Typecheck (mypy)
+        run: poetry run mypy src/
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: abatilo/actions-poetry@v3
+      - name: Install dependencies
+        run: poetry install
+      - name: Wait for Qdrant
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:6333/readyz | grep 'OK'; then
+              echo 'Qdrant ready'; break
+            fi
+            sleep 2
+          done
+      - name: Run tests
+        run: poetry run pytest --maxfail=3 --disable-warnings -v
+
+  nightly-summarize:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: abatilo/actions-poetry@v3
+      - name: Install dependencies
+        run: poetry install
+      - name: Wait for Qdrant
+        run: |
+          for i in {1..10}; do
+            if curl -s http://localhost:6333/readyz | grep 'OK'; then
+              echo 'Qdrant ready'; break
+            fi
+            sleep 2
+          done
+      - name: Run nightly summarizer
+        run: poetry run python -m autogen_mcp.summarizer_nightly
