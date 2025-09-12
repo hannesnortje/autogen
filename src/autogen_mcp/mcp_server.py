@@ -3,6 +3,7 @@ import uuid
 import json
 from pathlib import Path
 from typing import List
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
@@ -10,6 +11,9 @@ from autogen_mcp.memory import MemoryService
 from autogen_mcp.orchestrator import AgentOrchestrator
 from autogen_mcp.gemini_client import GeminiClient
 from autogen_mcp.observability import get_logger
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize services
 logger = get_logger("autogen.mcp_server")
@@ -339,3 +343,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             )
     except WebSocketDisconnect:
         manager.disconnect(session_id)
+
+
+# --- Server Startup ---
+
+if __name__ == "__main__":
+    import uvicorn
+
+    logger.info("Starting AutoGen MCP Server...")
+    logger.info(f"Gemini client available: {gemini_client is not None}")
+
+    uvicorn.run(app, host="0.0.0.0", port=9000, log_level="info")
