@@ -122,12 +122,12 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
   - [x] Memory view updates automatically
   - [x] Session changes reflected immediately
 - Tests:
-  - [ ] WebSocket: connection handling
-  - [ ] Real-time: message processing
-  - [ ] UI: automatic updates
+  - [x] WebSocket: connection handling
+  - [x] Real-time: message processing
+  - [x] UI: automatic updates
 - Artifacts:
-  - [ ] Real-time extension features
-  - [ ] ADR-016: Real-time communication patterns
+  - [x] Real-time extension features
+  - [x] ADR-016: Real-time communication patterns
 
 ### Step 20 — Workspace Integration and File Operations
 - Branch: `feature/20-workspace-integration`
