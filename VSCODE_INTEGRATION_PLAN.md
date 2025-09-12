@@ -26,20 +26,20 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 ### Step 15 — Add File Operations and WebSocket Support
 - Branch: `feature/15-mcp-realtime`
 - Scope:
-  - [ ] Add `/workspace/write` endpoint for file operations
-  - [ ] Add `/workspace/files` endpoint for file listing
-  - [ ] Implement WebSocket endpoint for real-time session updates
-  - [ ] Add session state management
+  - [x] Add `/workspace/write` endpoint for file operations
+  - [x] Add `/workspace/files` endpoint for file listing
+  - [x] Implement WebSocket endpoint for real-time session updates
+  - [x] Add session state management
 - Acceptance:
-  - [ ] MCP server can write files to workspace
-  - [ ] WebSocket streams agent progress in real-time
-  - [ ] Session state persists across requests
+  - [x] MCP server can write files to workspace
+  - [x] WebSocket streams agent progress in real-time
+  - [x] Session state persists across requests
 - Tests:
-  - [ ] Integration: file write operations
-  - [ ] WebSocket: connection and message flow
-  - [ ] Session: state persistence
+  - [x] Integration: file write operations
+  - [x] WebSocket: connection and message flow
+  - [x] Session: state persistence
 - Artifacts:
-  - [ ] ADR-014: Real-time updates and file operations
+  - [x] ADR-014: Real-time updates and file operations
 
 ## Phase 2: VS Code Extension Development
 **Goal**: Create a VS Code extension that provides seamless integration with the MCP server.
@@ -183,7 +183,7 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 
 ## Status Snapshot
 - [x] Step 14 — Connect Real Services to MCP Server
-- [ ] Step 15 — Add File Operations and WebSocket Support
+- [x] Step 15 — Add File Operations and WebSocket Support
 - [ ] Step 16 — VS Code Extension Scaffold
 - [ ] Step 17 — Core Extension Commands
 - [ ] Step 18 — Extension UI Components

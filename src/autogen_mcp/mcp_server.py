@@ -1,6 +1,9 @@
 import os
 import uuid
-from fastapi import FastAPI, HTTPException
+import json
+from pathlib import Path
+from typing import List
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from autogen_mcp.memory import MemoryService
@@ -21,6 +24,36 @@ except RuntimeError as e:
 
 # Global session storage (in production, use Redis or database)
 active_sessions: dict[str, dict] = {}
+
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, session_id: str):
+        await websocket.accept()
+        self.active_connections[session_id] = websocket
+        logger.info(f"WebSocket connected for session {session_id}")
+
+    def disconnect(self, session_id: str):
+        if session_id in self.active_connections:
+            del self.active_connections[session_id]
+            logger.info(f"WebSocket disconnected for session {session_id}")
+
+    async def send_personal_message(self, message: str, session_id: str):
+        if session_id in self.active_connections:
+            websocket = self.active_connections[session_id]
+            await websocket.send_text(message)
+
+    async def broadcast_session_update(self, session_id: str, update: dict):
+        message = json.dumps(
+            {"type": "session_update", "session_id": session_id, "data": update}
+        )
+        await self.send_personal_message(message, session_id)
+
+
+manager = ConnectionManager()
 
 app = FastAPI(title="AutoGen MCP Server")
 
@@ -199,3 +232,110 @@ async def objective_add(req: ObjectiveAddRequest):
     except Exception as e:
         logger.error("Failed to add objective", extra={"extra": {"error": str(e)}})
         raise HTTPException(status_code=500, detail=f"Add objective failed: {str(e)}")
+
+
+# --- File Operations Endpoints ---
+
+
+class WriteFileRequest(BaseModel):
+    file_path: str
+    content: str
+    project: str
+
+
+class ListFilesResponse(BaseModel):
+    files: List[str]
+    directories: List[str]
+
+
+@app.post("/workspace/write")
+async def write_file(req: WriteFileRequest):
+    try:
+        logger.info(
+            "Writing file",
+            extra={"extra": {"file_path": req.file_path, "project": req.project}},
+        )
+
+        workspace_path = os.getenv("MCP_WORKSPACE", os.getcwd())
+        full_path = Path(workspace_path) / req.file_path
+
+        # Ensure directory exists
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write file
+        with open(full_path, "w", encoding="utf-8") as f:
+            f.write(req.content)
+
+        # Log to memory
+        memory_service.set_project(req.project)
+        memory_service.write_event(
+            scope="artifact",
+            thread_id=f"files_{req.project}",
+            text=f"Created file: {req.file_path}",
+            metadata={
+                "type": "file_write",
+                "file_path": req.file_path,
+                "project": req.project,
+            },
+        )
+
+        logger.info(
+            "File written successfully", extra={"extra": {"file_path": req.file_path}}
+        )
+        return {
+            "status": "success",
+            "file_path": req.file_path,
+            "size": len(req.content),
+        }
+
+    except Exception as e:
+        logger.error("Failed to write file", extra={"extra": {"error": str(e)}})
+        raise HTTPException(status_code=500, detail=f"File write failed: {str(e)}")
+
+
+@app.get("/workspace/files", response_model=ListFilesResponse)
+async def list_files():
+    try:
+        workspace_path = Path(os.getenv("MCP_WORKSPACE", os.getcwd()))
+
+        files = []
+        directories = []
+
+        for item in workspace_path.rglob("*"):
+            if item.is_file():
+                # Get relative path from workspace
+                rel_path = item.relative_to(workspace_path)
+                files.append(str(rel_path))
+            elif item.is_dir() and item != workspace_path:
+                rel_path = item.relative_to(workspace_path)
+                directories.append(str(rel_path))
+
+        logger.info(
+            "Listed workspace files",
+            extra={"extra": {"file_count": len(files), "dir_count": len(directories)}},
+        )
+        return ListFilesResponse(files=files, directories=directories)
+
+    except Exception as e:
+        logger.error("Failed to list files", extra={"extra": {"error": str(e)}})
+        raise HTTPException(status_code=500, detail=f"File listing failed: {str(e)}")
+
+
+# --- WebSocket Endpoints ---
+
+
+@app.websocket("/ws/session/{session_id}")
+async def websocket_endpoint(websocket: WebSocket, session_id: str):
+    await manager.connect(websocket, session_id)
+    try:
+        while True:
+            # Keep connection alive and handle incoming messages
+            data = await websocket.receive_text()
+            message = json.loads(data)
+
+            # Echo back for now - in production, handle different message types
+            await manager.send_personal_message(
+                json.dumps({"type": "echo", "data": message}), session_id
+            )
+    except WebSocketDisconnect:
+        manager.disconnect(session_id)
