@@ -175,17 +175,17 @@ Conventions
 ## Step 9 — Git branching and artifacts
 - Branch: `feature/09-git-workflow`
 - Scope:
-  - [ ] Automation for per-agent branch creation and commit/push
-  - [ ] PR creation with templates and checklists
-  - [ ] Store commit SHAs, PR URLs, CI run IDs in memory
+  - [x] Automation for per-agent branch creation and commit/push
+  - [x] PR creation with templates and checklists
+  - [x] Store commit SHAs, PR URLs, CI run IDs in memory
 - Acceptance:
-  - [ ] Branch/commit/push automated wrapper
-  - [ ] PRs created; checks required before merge
+  - [x] Branch/commit/push automated wrapper
+  - [x] PRs created; checks required before merge
 - Tests:
-  - [ ] Dry-run mode simulating git/PR ops locally
-  - [ ] Live test on repo (non-destructive)
+  - [x] Dry-run mode simulating git/PR ops locally
+  - [x] Live test on repo (non-destructive)
 - Artifacts:
-  - [ ] ADR-008: Git policy and artifact linkage
+  - [x] ADR-008: Git policy and artifact linkage
 
 ## Step 10 — Observability and tracing
 - Branch: `feature/10-observability`
@@ -259,7 +259,7 @@ Conventions
 - [ ] Step 6 — Memory write policies and summarization
 - [x] Step 7 — AutoGen agents scaffolding
 - [x] Step 8 — VS Code MCP server integration
-- [ ] Step 9 — Git branching and artifacts
+- [x] Step 9 — Git branching and artifacts
 - [ ] Step 10 — Observability and tracing
 - [ ] Step 11 — Security and data hygiene
 - [ ] Step 12 — CI/CD pipelines and schedules
@@ -270,3 +270,4 @@ Conventions
 ## Change log (append entries as we progress)
 - 2024-06-08: Step 7 (AutoGen agents scaffolding, Gemini integration, CLI) completed and merged from 'feature/07-agents-gemini-integration'.
 - 2025-09-12: Step 8 (VS Code MCP server integration) completed and merged from 'feature/08-mcp-server'.
+- 2025-09-12: Step 9 (Git workflow automation, PR/commit/CI artifact linkage) completed and merged from 'feature/09-git-workflow'.
