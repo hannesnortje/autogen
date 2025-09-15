@@ -177,7 +177,30 @@ class AgileAgent(Agent):
     def act(
         self, observation: Any, context: Optional[List[Dict[str, Any]]] = None
     ) -> Any:
-        # Use context from memory to inform decision making
+        # Check if this is an agile project request
+        observation_str = str(observation).lower()
+        if any(
+            term in observation_str
+            for term in [
+                "agile project",
+                "ranger file system",
+                "multi-sprint",
+                "scrum project",
+                "file manager project",
+                "comprehensive project",
+            ]
+        ):
+            # This is an agile project request - delegate to CoderAgent
+            return {
+                "agent": "Agile",
+                "action": "agile_project_request",
+                "observation": observation,
+                "message": f"[Agile] Detected agile project request. Coordinating development for: {observation}",
+                "delegate_to": "coder_agile_project",
+                "project_type": (
+                    "file_system" if "file" in observation_str else "web_app"
+                ),
+            }  # Use context from memory to inform decision making
         context_info = ""
         if context:
             recent_decisions = [
@@ -2337,6 +2360,46 @@ const handleClick = () => {{
   border-radius: 8px;
 }}
 </style>"""
+
+    async def create_agile_project(
+        self, target_dir: str, project_name: str, project_type: str = "file_system"
+    ):
+        """Create a comprehensive agile project.
+
+        This method integrates the enhanced scrum agents directly into
+        autogen's CoderAgent to execute agile projects with full
+        scrum methodology, multiple sprints, and comprehensive development.
+        """
+        from autogen_mcp.scrum_agents import create_major_agile_project
+
+        # Store the current project request in memory if available
+        if self.memory_service:
+            self.make_decision(
+                decision=f"Agile project creation: {project_name}",
+                reasoning=f"Initiating {project_type} project with full scrum process",
+                context=f"Target: {target_dir}, Type: {project_type}",
+            )
+
+        print(f"[CoderAgent] Initiating agile project: {project_name}")
+        print(f"[CoderAgent] Project type: {project_type}")
+        print(f"[CoderAgent] Target directory: {target_dir}")
+
+        # Execute the agile project
+        team = await create_major_agile_project(
+            target_dir=target_dir, project_name=project_name, project_type=project_type
+        )
+
+        # Return structured response
+        return {
+            "agent": "Coder",
+            "action": "agile_project",
+            "project_name": project_name,
+            "project_type": project_type,
+            "target_dir": target_dir,
+            "team_size": len(team.all_members),
+            "message": f"[CoderAgent] Completed agile project: {project_name}",
+            "success": True,
+        }
 
 
 @register_agent("Reviewer")

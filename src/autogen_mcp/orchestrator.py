@@ -290,18 +290,89 @@ class AgentOrchestrator:
 
         return self.knowledge_management.import_system_knowledge(import_path)
 
+    async def run_agile_project(
+        self, target_dir: str, project_name: str, project_type: str = "file_system"
+    ):
+        """Run a comprehensive agile project.
+
+        This integrates with the enhanced scrum agents to execute
+        a complete agile project with multiple sprints, comprehensive
+        planning, architecture, development, and testing.
+        """
+        from autogen_mcp.scrum_agents import create_major_agile_project
+
+        print(f"🚀 Starting agile project: {project_name}")
+        print(f"📁 Target directory: {target_dir}")
+        print(f"🏗️  Project type: {project_type}")
+        print()
+
+        # Execute the agile project
+        team = await create_major_agile_project(
+            target_dir=target_dir, project_name=project_name, project_type=project_type
+        )
+
+        # Store project results in knowledge management if available
+        if self.knowledge_management:
+            project_summary = {
+                "project_name": project_name,
+                "project_type": project_type,
+                "target_dir": target_dir,
+                "team_size": len(team.all_members),
+                "completion_status": "success",
+            }
+
+            # Store in knowledge base for future reference
+            self.knowledge_management.add_project_insight(
+                project_name,
+                f"Completed agile project: {project_name}",
+                project_summary,
+            )
+
+        return team
+
 
 # Example usage (to be replaced with CLI or server integration)
 if __name__ == "__main__":
+    import asyncio
 
-    agent_configs = [
-        {"role": "Agile", "name": "agile1"},
-        {"role": "Planner", "name": "planner1"},
-        {"role": "Coder", "name": "coder1"},
-    ]
-    gemini = GeminiClient()
-    orchestrator = AgentOrchestrator(agent_configs, gemini)
-    prompt = "Summarize the next sprint goal in one sentence."
-    results = orchestrator.run_turn(prompt)
-    for name, output in results.items():
-        print(f"{name}: {output}")
+    async def demo_agile_project():
+        """Demo the agile project functionality."""
+        agent_configs = [
+            {"role": "Agile", "name": "agile1"},
+            {"role": "Planner", "name": "planner1"},
+            {"role": "Coder", "name": "coder1"},
+        ]
+
+        # Create orchestrator without Gemini client for agile project demo
+        try:
+            gemini = GeminiClient()
+            orchestrator = AgentOrchestrator(agent_configs, gemini)
+
+            # Test basic agent interaction
+            prompt = "Create an agile project for a Ranger file system"
+            results = orchestrator.run_turn(prompt)
+            for name, output in results.items():
+                print(f"{name}: {output}")
+
+        except RuntimeError as e:
+            if "GEMINI_API_KEY" in str(e):
+                print("⚠️  Gemini API key not set, running agile project directly...")
+                orchestrator = AgentOrchestrator(agent_configs, None)
+
+        # Test direct agile project creation (doesn't need Gemini)
+        try:
+            team = await orchestrator.run_agile_project(
+                target_dir="/media/hannesn/storage/Code/Test",
+                project_name="Ranger File System",
+                project_type="file_system",
+            )
+            print(
+                f"✅ Agile project completed with {len(team.all_members)} team members"
+            )
+        except Exception as e:
+            print(f"❌ Error in agile project: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    asyncio.run(demo_agile_project())
