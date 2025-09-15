@@ -625,6 +625,99 @@ class MemoryExplorerPanel implements IMemoryExplorerPanel {
                         gap: var(--spacing-sm);
                         margin-top: var(--spacing-md);
                     }
+
+                    /* Analytics Styles */
+                    .analytics-container, .cross-project-container {
+                        margin: var(--spacing-lg) 0;
+                        padding: var(--spacing-md);
+                        border: 1px solid var(--vscode-panel-border);
+                        border-radius: var(--border-radius);
+                        background: var(--vscode-editor-inactiveSelectionBackground);
+                    }
+
+                    .analytics-header, .cross-project-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: var(--spacing-md);
+                        padding-bottom: var(--spacing-sm);
+                        border-bottom: 1px solid var(--vscode-panel-border);
+                    }
+
+                    .analytics-actions {
+                        display: flex;
+                        gap: var(--spacing-sm);
+                    }
+
+                    .analytics-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                        gap: var(--spacing-md);
+                        margin-top: var(--spacing-md);
+                    }
+
+                    .analytics-card {
+                        padding: var(--spacing-md);
+                        border: 1px solid var(--vscode-panel-border);
+                        border-radius: var(--border-radius);
+                        background: var(--vscode-editor-background);
+                    }
+
+                    .analytics-card h3 {
+                        margin: 0 0 var(--spacing-sm) 0;
+                        color: var(--vscode-editor-foreground);
+                    }
+
+                    .analytics-content {
+                        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                        font-size: 0.9em;
+                        line-height: 1.4;
+                        white-space: pre-wrap;
+                        color: var(--vscode-editor-foreground);
+                    }
+
+                    .health-status {
+                        padding: var(--spacing-xs) var(--spacing-sm);
+                        border-radius: var(--border-radius);
+                        font-weight: bold;
+                        margin: var(--spacing-xs) 0;
+                    }
+
+                    .health-good {
+                        background: var(--vscode-charts-green);
+                        color: white;
+                    }
+
+                    .health-warning {
+                        background: var(--vscode-charts-yellow);
+                        color: black;
+                    }
+
+                    .health-error {
+                        background: var(--vscode-charts-red);
+                        color: white;
+                    }
+
+                    .metric-item {
+                        margin: var(--spacing-sm) 0;
+                        padding: var(--spacing-sm);
+                        border-left: 3px solid var(--vscode-focusBorder);
+                        background: var(--vscode-editor-inactiveSelectionBackground);
+                    }
+
+                    .suggestion-item {
+                        margin: var(--spacing-sm) 0;
+                        padding: var(--spacing-md);
+                        border: 1px solid var(--vscode-panel-border);
+                        border-radius: var(--border-radius);
+                        background: var(--vscode-editor-background);
+                    }
+
+                    .suggestion-title {
+                        font-weight: bold;
+                        margin-bottom: var(--spacing-xs);
+                        color: var(--vscode-textLink-foreground);
+                    }
                 </style>
             </head>
             <body>
@@ -665,6 +758,44 @@ class MemoryExplorerPanel implements IMemoryExplorerPanel {
                     </div>
                 </div>
 
+                <!-- Memory Analytics Section -->
+                <div class="analytics-container" id="analyticsContainer" style="margin: var(--spacing-lg) 0; display: none;">
+                    <div class="analytics-header">
+                        <h2>📊 Memory Analytics</h2>
+                        <div class="analytics-actions">
+                            <button onclick="loadHealthData()" class="button-secondary">Health Check</button>
+                            <button onclick="loadMetricsData()" class="button-secondary">Load Metrics</button>
+                            <button onclick="refreshAnalytics()" class="button-secondary">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="analytics-grid">
+                        <div class="analytics-card" id="healthCard" style="display: none;">
+                            <h3>🏥 System Health</h3>
+                            <div id="healthData" class="analytics-content"></div>
+                        </div>
+
+                        <div class="analytics-card" id="metricsCard" style="display: none;">
+                            <h3>📈 Performance Metrics</h3>
+                            <div id="metricsData" class="analytics-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cross-Project Intelligence Section -->
+                <div class="cross-project-container" id="crossProjectContainer" style="margin: var(--spacing-lg) 0; display: none;">
+                    <div class="cross-project-header">
+                        <h2>🌐 Cross-Project Intelligence</h2>
+                        <button onclick="getCrossProjectSuggestions()" class="button-secondary">Get Suggestions</button>
+                    </div>
+
+                    <div class="cross-project-content">
+                        <div id="suggestionsData" class="analytics-content">
+                            <p>Load cross-project suggestions to see relevant patterns and insights.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="results-container" id="resultsContainer" style="display: none;">
                     <div class="results-header">
                         <div class="results-stats" id="resultsStats"></div>
@@ -690,6 +821,18 @@ class MemoryExplorerPanel implements IMemoryExplorerPanel {
                                 break;
                             case 'memoriesLoaded':
                                 handleMemoriesLoaded(message);
+                                break;
+                            case 'healthData':
+                                handleHealthData(message);
+                                break;
+                            case 'metricsData':
+                                handleMetricsData(message);
+                                break;
+                            case 'crossProjectSuggestions':
+                                handleCrossProjectSuggestions(message);
+                                break;
+                            case 'analyticsRefreshed':
+                                handleAnalyticsRefreshed(message);
                                 break;
                         }
                     });
@@ -860,6 +1003,145 @@ class MemoryExplorerPanel implements IMemoryExplorerPanel {
                     document.addEventListener('DOMContentLoaded', () => {
                         loadRecentMemories();
                     });
+
+                    // Analytics Functions
+                    function loadHealthData() {
+                        vscode.postMessage({ type: 'loadHealthData' });
+                    }
+
+                    function loadMetricsData() {
+                        vscode.postMessage({ type: 'loadMetricsData' });
+                    }
+
+                    function getCrossProjectSuggestions() {
+                        vscode.postMessage({ type: 'getCrossProjectSuggestions' });
+                    }
+
+                    function refreshAnalytics() {
+                        vscode.postMessage({ type: 'refreshAnalytics' });
+                    }
+
+                    function handleHealthData(message) {
+                        const healthCard = document.getElementById('healthCard');
+                        const healthData = document.getElementById('healthData');
+                        const analyticsContainer = document.getElementById('analyticsContainer');
+
+                        if (message.data) {
+                            const health = message.data;
+                            let healthHtml = '';
+
+                            if (health.overall_status) {
+                                const statusClass = health.overall_status.toLowerCase().replace(' ', '-');
+                                healthHtml += '<div class="health-status health-' + statusClass + '">' + health.overall_status + '</div>';
+                            }
+
+                            if (health.memory_usage) {
+                                healthHtml += '<div class="metric-item">Memory Usage: ' + health.memory_usage.used + '/' + health.memory_usage.total + '</div>';
+                            }
+
+                            if (health.performance_score) {
+                                healthHtml += '<div class="metric-item">Performance Score: ' + health.performance_score + '</div>';
+                            }
+
+                            if (health.issues && health.issues.length > 0) {
+                                healthHtml += '<div class="metric-item"><strong>Issues:</strong><ul>';
+                                health.issues.forEach(issue => {
+                                    healthHtml += '<li>' + escapeHtml(issue) + '</li>';
+                                });
+                                healthHtml += '</ul></div>';
+                            }
+
+                            healthData.innerHTML = healthHtml;
+                            healthCard.style.display = 'block';
+                            analyticsContainer.style.display = 'block';
+                        } else {
+                            showError('Failed to load health data');
+                        }
+                    }
+
+                    function handleMetricsData(message) {
+                        const metricsCard = document.getElementById('metricsCard');
+                        const metricsData = document.getElementById('metricsData');
+                        const analyticsContainer = document.getElementById('analyticsContainer');
+
+                        if (message.data) {
+                            const metrics = message.data;
+                            let metricsHtml = '';
+
+                            if (metrics.response_times) {
+                                metricsHtml += '<div class="metric-item">Average Response Time: ' + metrics.response_times.average + 'ms</div>';
+                                metricsHtml += '<div class="metric-item">95th Percentile: ' + metrics.response_times.p95 + 'ms</div>';
+                            }
+
+                            if (metrics.memory_efficiency) {
+                                metricsHtml += '<div class="metric-item">Memory Efficiency: ' + metrics.memory_efficiency + '%</div>';
+                            }
+
+                            if (metrics.cache_hit_rate) {
+                                metricsHtml += '<div class="metric-item">Cache Hit Rate: ' + metrics.cache_hit_rate + '%</div>';
+                            }
+
+                            if (metrics.total_memories) {
+                                metricsHtml += '<div class="metric-item">Total Memories: ' + metrics.total_memories + '</div>';
+                            }
+
+                            if (metrics.recent_activity && metrics.recent_activity.length > 0) {
+                                metricsHtml += '<div class="metric-item"><strong>Recent Activity:</strong><ul>';
+                                metrics.recent_activity.slice(0, 5).forEach(activity => {
+                                    metricsHtml += '<li>' + escapeHtml(activity) + '</li>';
+                                });
+                                metricsHtml += '</ul></div>';
+                            }
+
+                            metricsData.innerHTML = metricsHtml;
+                            metricsCard.style.display = 'block';
+                            analyticsContainer.style.display = 'block';
+                        } else {
+                            showError('Failed to load metrics data');
+                        }
+                    }
+
+                    function handleCrossProjectSuggestions(message) {
+                        const suggestionsData = document.getElementById('suggestionsData');
+                        const crossProjectContainer = document.getElementById('crossProjectContainer');
+
+                        if (message.data && message.data.length > 0) {
+                            let suggestionsHtml = '';
+                            message.data.forEach(suggestion => {
+                                const title = escapeHtml(suggestion.title || 'Suggestion');
+                                const content = escapeHtml(suggestion.description || suggestion.content || '');
+                                const similarity = suggestion.similarity_score ? '<div><small>Similarity: ' + suggestion.similarity_score + '%</small></div>' : '';
+
+                                suggestionsHtml += '<div class="suggestion-item">' +
+                                    '<div class="suggestion-title">' + title + '</div>' +
+                                    '<div>' + content + '</div>' +
+                                    similarity +
+                                    '</div>';
+                            });
+                            suggestionsData.innerHTML = suggestionsHtml;
+                        } else {
+                            suggestionsData.innerHTML = '<p>No cross-project suggestions found.</p>';
+                        }
+
+                        crossProjectContainer.style.display = 'block';
+                    }
+
+                    function handleAnalyticsRefreshed(message) {
+                        if (message.success) {
+                            // Reload any visible analytics sections
+                            const healthCard = document.getElementById('healthCard');
+                            const metricsCard = document.getElementById('metricsCard');
+
+                            if (healthCard.style.display !== 'none') {
+                                loadHealthData();
+                            }
+                            if (metricsCard.style.display !== 'none') {
+                                loadMetricsData();
+                            }
+                        } else {
+                            showError('Failed to refresh analytics data');
+                        }
+                    }
                 </script>
             </body>
             </html>

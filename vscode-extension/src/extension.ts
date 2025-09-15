@@ -742,6 +742,36 @@ async function getDashboardData() {
     const allSessions = sessionTreeProvider.getAllSessions();
     const activeSessions = allSessions.filter(s => s.status === 'active');
 
+    // Get memory analytics data
+    let memoryHealth = null;
+    let memoryMetrics = null;
+    let crossProjectSuggestions = null;
+
+    try {
+        if (isConnected) {
+            // Fetch memory analytics in parallel
+            const [healthData, metricsData, suggestionsData] = await Promise.all([
+                mcpClient.getMemoryHealth().catch(() => null),
+                mcpClient.getMemoryMetrics().catch(() => null),
+                mcpClient.getProjectRecommendations({
+                    current_project: {
+                        name: vscode.workspace.name || 'Current Project',
+                        tech_stack: ['typescript', 'vscode-extension'],
+                        domain: 'software-development'
+                    },
+                    recommendation_types: ['similar_projects', 'patterns', 'insights'],
+                    max_recommendations: 5
+                }).catch(() => null)
+            ]);
+
+            memoryHealth = healthData;
+            memoryMetrics = metricsData;
+            crossProjectSuggestions = suggestionsData;
+        }
+    } catch (error) {
+        console.warn('Failed to fetch analytics data:', error);
+    }
+
     return {
         serverStatus: {
             connected: isConnected,
@@ -759,6 +789,11 @@ async function getDashboardData() {
             activeAgents: activeSessions.reduce((sum, s) => sum + s.agents.length, 0),
             totalConversations: allSessions.reduce((sum, s) => sum + s.conversation_count, 0),
             totalMemories: allSessions.reduce((sum, s) => sum + s.memory_count, 0)
+        },
+        memoryAnalytics: {
+            health: memoryHealth,
+            metrics: memoryMetrics,
+            crossProjectSuggestions: crossProjectSuggestions
         },
         sessions: allSessions,
         workspace: {
@@ -800,6 +835,86 @@ async function exportSessionData() {
     } catch (error) {
         vscode.window.showErrorMessage(`Export failed: ${error}`);
     }
+}
+
+function getMemoryAnalyticsSection(analytics: any): string {
+    if (!analytics) {
+        return '';
+    }
+
+    const healthSection = analytics.health ? `
+        <div class="analytics-card">
+            <h4>🏥 Memory Health</h4>
+            <div class="health-indicator ${analytics.health.overall_status?.toLowerCase().replace(' ', '-') || 'unknown'}">
+                ${analytics.health.overall_status || 'Unknown'}
+            </div>
+            ${analytics.health.memory_usage ? `
+                <div class="metric-row">
+                    <span>Memory Usage:</span>
+                    <span>${analytics.health.memory_usage.used}/${analytics.health.memory_usage.total}</span>
+                </div>
+            ` : ''}
+            ${analytics.health.performance_score ? `
+                <div class="metric-row">
+                    <span>Performance Score:</span>
+                    <span>${analytics.health.performance_score}</span>
+                </div>
+            ` : ''}
+        </div>
+    ` : '';
+
+    const metricsSection = analytics.metrics ? `
+        <div class="analytics-card">
+            <h4>📈 Performance Metrics</h4>
+            ${analytics.metrics.response_times ? `
+                <div class="metric-row">
+                    <span>Avg Response:</span>
+                    <span>${analytics.metrics.response_times.average}ms</span>
+                </div>
+            ` : ''}
+            ${analytics.metrics.memory_efficiency ? `
+                <div class="metric-row">
+                    <span>Memory Efficiency:</span>
+                    <span>${analytics.metrics.memory_efficiency}%</span>
+                </div>
+            ` : ''}
+            ${analytics.metrics.cache_hit_rate ? `
+                <div class="metric-row">
+                    <span>Cache Hit Rate:</span>
+                    <span>${analytics.metrics.cache_hit_rate}%</span>
+                </div>
+            ` : ''}
+        </div>
+    ` : '';
+
+    const suggestionsSection = analytics.crossProjectSuggestions && analytics.crossProjectSuggestions.length > 0 ? `
+        <div class="analytics-card">
+            <h4>🌐 Cross-Project Insights</h4>
+            <div class="suggestions-list">
+                ${analytics.crossProjectSuggestions.slice(0, 3).map((suggestion: any) => `
+                    <div class="suggestion-item">
+                        <div class="suggestion-title">${suggestion.title || 'Suggestion'}</div>
+                        <div class="suggestion-content">${(suggestion.description || suggestion.content || '').substring(0, 100)}...</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    ` : '';
+
+    if (!healthSection && !metricsSection && !suggestionsSection) {
+        return '';
+    }
+
+    return `
+        <div class="dashboard-section memory-analytics">
+            <h3 class="section-title">🧠 Memory Analytics</h3>
+            <div class="analytics-grid">
+                ${healthSection}
+                ${metricsSection}
+                ${suggestionsSection}
+            </div>
+        </div>
+    `;
 }
 
 function getComprehensiveDashboardHtml(data: any): string {
@@ -1174,6 +1289,90 @@ function getComprehensiveDashboardHtml(data: any): string {
                     animation: pulse 2s infinite;
                 }
 
+                /* Memory Analytics Styles */
+                .memory-analytics .analytics-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                    gap: 16px;
+                    margin-top: 16px;
+                }
+
+                .analytics-card {
+                    padding: 16px;
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: var(--border-radius);
+                    background: var(--vscode-editor-background);
+                }
+
+                .analytics-card h4 {
+                    margin: 0 0 12px 0;
+                    color: var(--vscode-editor-foreground);
+                    font-size: 1.1em;
+                }
+
+                .health-indicator {
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    text-align: center;
+                    margin: 8px 0;
+                }
+
+                .health-indicator.good {
+                    background: var(--success-color);
+                    color: white;
+                }
+
+                .health-indicator.warning {
+                    background: var(--warning-color);
+                    color: black;
+                }
+
+                .health-indicator.error, .health-indicator.critical {
+                    background: var(--danger-color);
+                    color: white;
+                }
+
+                .health-indicator.unknown {
+                    background: var(--vscode-editor-inactiveSelectionBackground);
+                    color: var(--vscode-editor-foreground);
+                }
+
+                .metric-row {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 4px 0;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+
+                .metric-row:last-child {
+                    border-bottom: none;
+                }
+
+                .suggestions-list {
+                    max-height: 200px;
+                    overflow-y: auto;
+                }
+
+                .suggestion-item {
+                    margin: 8px 0;
+                    padding: 8px;
+                    border-left: 3px solid var(--primary-color);
+                    background: var(--vscode-editor-inactiveSelectionBackground);
+                }
+
+                .suggestion-title {
+                    font-weight: bold;
+                    margin-bottom: 4px;
+                    color: var(--vscode-textLink-foreground);
+                }
+
+                .suggestion-content {
+                    font-size: 0.9em;
+                    color: var(--vscode-descriptionForeground);
+                    line-height: 1.4;
+                }
+
                 @media (max-width: 768px) {
                     .dashboard-grid {
                         grid-template-columns: 1fr;
@@ -1184,6 +1383,10 @@ function getComprehensiveDashboardHtml(data: any): string {
                     }
 
                     .quick-actions {
+                        grid-template-columns: 1fr;
+                    }
+
+                    .memory-analytics .analytics-grid {
                         grid-template-columns: 1fr;
                     }
                 }
@@ -1234,6 +1437,8 @@ function getComprehensiveDashboardHtml(data: any): string {
                     <h3 class="section-title">📋 Recent Sessions</h3>
                     ${recentSessions || '<p>No sessions found</p>'}
                 </div>
+
+                ${getMemoryAnalyticsSection(data.memoryAnalytics)}
 
                 ${currentSessionInfo}
 
