@@ -168,3 +168,6 @@ poetry.toml
 ### VisualStudioCode Patch ###
 # Ignore all local history of files
 .ionide/
+
+# Qdrant data directory
+qdrant_data/
