@@ -150,6 +150,9 @@ async def start_orchestration(req: OrchestrateRequest):
 
         orchestrator = AgentOrchestrator(agent_configs, gemini_client)
 
+        # Start the session with the objective
+        orchestrator.start_session(req.objective)
+
         # Store session
         active_sessions[session_id] = {
             "orchestrator": orchestrator,
@@ -158,6 +161,21 @@ async def start_orchestration(req: OrchestrateRequest):
             "status": "active",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
+
+        # Start the initial conversation with the objective
+        try:
+            # Give the agents the initial prompt to start working
+            initial_prompt = f"Begin working on this objective: {req.objective}"
+            orchestrator.run_turn(initial_prompt, session_id)
+            logger.info(
+                "Initial agent conversation started",
+                extra={"extra": {"session_id": session_id, "objective": req.objective}},
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to start initial conversation",
+                extra={"extra": {"session_id": session_id, "error": str(e)}},
+            )
 
         logger.info(
             "Orchestration started", extra={"extra": {"session_id": session_id}}

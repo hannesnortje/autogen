@@ -110,7 +110,64 @@ class AgentOrchestrator:
             agent.observe(completion)
             results[agent.name] = response
 
+            # Handle file writing if agent returned structured file data
+            if isinstance(response, dict) and response.get("action") == "file_creation":
+                self._handle_file_creation(response, working_session_id)
+
         return results
+
+    def _handle_file_creation(self, agent_response: dict, session_id: str) -> None:
+        """
+        Handle file creation from agent responses by calling the workspace
+        write endpoint.
+        """
+        import requests
+        import os
+
+        files = agent_response.get("files", [])
+        agent_name = agent_response.get("agent", "Unknown")
+
+        for file_info in files:
+            filename = file_info.get("filename")
+            content = file_info.get("content")
+
+            if filename and content:
+                try:
+                    # Get workspace path and project name
+                    workspace_path = os.getenv("MCP_WORKSPACE", os.getcwd())
+                    project_name = os.path.basename(workspace_path)
+
+                    # Call the write endpoint
+                    write_data = {
+                        "file_path": filename,
+                        "content": content,
+                        "project": project_name,
+                    }
+
+                    response = requests.post(
+                        "http://127.0.0.1:9000/workspace/write",
+                        json=write_data,
+                        timeout=10,
+                    )
+
+                    if response.status_code == 200:
+                        print(
+                            f"[Orchestrator] {agent_name} created file: " f"{filename}"
+                        )
+                    else:
+                        print(
+                            f"[Orchestrator] Failed to write {filename}: "
+                            f"{response.text}"
+                        )
+
+                except Exception as e:
+                    print(f"[Orchestrator] Error writing file {filename}: " f"{str(e)}")
+
+            else:
+                print(
+                    f"[Orchestrator] Invalid file data from {agent_name}: "
+                    f"missing filename or content"
+                )
 
     def run_multi_turn_session(
         self, initial_prompt: str, num_turns: int = 3, objective: Optional[str] = None

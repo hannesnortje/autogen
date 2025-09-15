@@ -288,6 +288,276 @@ class KnowledgeSeeder:
                 "domain": "software-architecture",
                 "language": "general",
             },
+            # Vue.js Component Generation Patterns
+            {
+                "content": """Vue.js Hero Component Pattern: For creating landing page hero sections.
+                Template: Full viewport height section with background, centered content, call-to-action buttons
+                Script: Vue 3 Composition API with onMounted lifecycle
+                Style: Gradient backgrounds, responsive typography, hover animations
+                Keywords: hero, landing, banner, homepage, portfolio, website
+                Use Case: Main banner section for websites, portfolios, marketing pages""",
+                "category": "vue-component-pattern",
+                "tags": [
+                    "vue3",
+                    "hero",
+                    "component",
+                    "website",
+                    "portfolio",
+                    "landing",
+                ],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "vue",
+            },
+            {
+                "content": """Vue.js About Component Pattern: For creating about/bio sections.
+                Template: Grid layout with profile image, text content, skills, achievements
+                Script: Intersection Observer for skill bar animations, Vue 3 Composition API
+                Style: Two-column responsive layout, skill progress bars, achievement cards
+                Keywords: about, bio, profile, skills, experience, team, portfolio
+                Use Case: About pages, team profiles, developer portfolios, company info""",
+                "category": "vue-component-pattern",
+                "tags": [
+                    "vue3",
+                    "about",
+                    "profile",
+                    "skills",
+                    "component",
+                    "portfolio",
+                ],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "vue",
+            },
+            {
+                "content": """Vue.js Footer Component Pattern: For creating website footers.
+                Template: Multi-column layout with brand, links, contact, social media
+                Script: Basic Vue 3 setup, minimal JavaScript needed
+                Style: Dark theme, responsive grid, social icons, hover effects
+                Keywords: footer, contact, social, links, navigation, copyright
+                Use Case: Website footers, contact sections, social media links""",
+                "category": "vue-component-pattern",
+                "tags": [
+                    "vue3",
+                    "footer",
+                    "contact",
+                    "social",
+                    "navigation",
+                    "website",
+                ],
+                "importance": 0.8,
+                "domain": "frontend-development",
+                "language": "vue",
+            },
+            {
+                "content": """Vue.js App Component Pattern: For main application shell.
+                Template: Router view with header/footer layout structure
+                Script: Import header/footer components, Vue 3 setup
+                Style: Global styles, CSS reset, container classes, flexbox layout
+                Keywords: app, layout, shell, main, root, navigation, website
+                Use Case: Main application wrapper, website layout, SPA shell""",
+                "category": "vue-component-pattern",
+                "tags": ["vue3", "app", "layout", "main", "shell", "website"],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "vue",
+            },
+            {
+                "content": """Vue.js Header/Navigation Component Pattern: For website navigation.
+                Template: Logo, navigation menu, mobile hamburger menu, CTAs
+                Script: Reactive menu state, scroll effects, mobile menu toggle
+                Style: Sticky navigation, responsive breakpoints, smooth transitions
+                Keywords: header, navigation, nav, menu, navbar, logo, mobile
+                Use Case: Website navigation, app header, menu systems""",
+                "category": "vue-component-pattern",
+                "tags": ["vue3", "header", "navigation", "menu", "navbar", "website"],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "vue",
+            },
+            {
+                "content": """Vue.js Todo Component Pattern: For task management interfaces.
+                Template: Input form, todo list, item actions (edit/delete/complete)
+                Script: Reactive state management, CRUD operations, local storage
+                Style: Clean list layout, status indicators, action buttons
+                Keywords: todo, task, list, crud, management, productivity, app
+                Use Case: Task management apps, todo lists, project management""",
+                "category": "vue-component-pattern",
+                "tags": ["vue3", "todo", "task", "crud", "list", "management", "app"],
+                "importance": 0.8,
+                "domain": "frontend-development",
+                "language": "vue",
+            },
+            # React Component Patterns
+            {
+                "content": """React Hero Component Pattern: For landing page hero sections.
+                JSX: Full viewport height section with styled-components or CSS modules
+                Hooks: useState, useEffect for animations and interactions
+                Props: Title, subtitle, backgroundImage, ctaButtons array
+                Keywords: hero, landing, banner, homepage, portfolio, website, react
+                Use Case: Main banner for React websites, Next.js apps, marketing pages""",
+                "category": "react-component-pattern",
+                "tags": [
+                    "react",
+                    "hero",
+                    "component",
+                    "website",
+                    "portfolio",
+                    "landing",
+                    "jsx",
+                ],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "react",
+            },
+            {
+                "content": """React About Component Pattern: For profile/bio sections.
+                JSX: Grid layout with profile card, skills section, achievements
+                Hooks: useState for skill animations, useRef for intersection observer
+                Props: profileData, skills array, achievements array
+                Keywords: about, bio, profile, skills, experience, team, portfolio, react
+                Use Case: About pages, team profiles, developer portfolios in React""",
+                "category": "react-component-pattern",
+                "tags": [
+                    "react",
+                    "about",
+                    "profile",
+                    "skills",
+                    "component",
+                    "portfolio",
+                    "jsx",
+                ],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "react",
+            },
+            {
+                "content": """React Header Component Pattern: For navigation components.
+                JSX: Responsive navbar with mobile hamburger menu
+                Hooks: useState for menu state, useEffect for scroll detection
+                Props: logo, menuItems array, brand props
+                Keywords: header, navigation, nav, menu, navbar, logo, mobile, react
+                Use Case: Website navigation, app header, React Router integration""",
+                "category": "react-component-pattern",
+                "tags": ["react", "header", "navigation", "menu", "navbar", "jsx"],
+                "importance": 0.9,
+                "domain": "frontend-development",
+                "language": "react",
+            },
+            # Lit 3 Component Patterns
+            {
+                "content": """Lit 3 Hero Component Pattern: Web component hero section.
+                Template: lit-html template with CSS-in-JS styling
+                Properties: @property decorators for title, subtitle, backgroundUrl
+                Events: Custom events for button interactions
+                Keywords: hero, landing, banner, lit, web-component, portfolio
+                Use Case: Framework-agnostic hero sections, micro-frontends""",
+                "category": "lit-component-pattern",
+                "tags": [
+                    "lit3",
+                    "hero",
+                    "web-component",
+                    "template",
+                    "portfolio",
+                    "landing",
+                ],
+                "importance": 0.8,
+                "domain": "frontend-development",
+                "language": "lit",
+            },
+            {
+                "content": """Lit 3 Card Component Pattern: Reusable card web component.
+                Template: Flexible card layout with slots for content
+                Properties: @property for title, image, variant styling
+                Styling: Shadow DOM with :host() selectors and CSS custom properties
+                Keywords: card, component, lit, web-component, reusable, ui
+                Use Case: Product cards, blog posts, profile cards, dashboards""",
+                "category": "lit-component-pattern",
+                "tags": ["lit3", "card", "web-component", "ui", "reusable"],
+                "importance": 0.8,
+                "domain": "frontend-development",
+                "language": "lit",
+            },
+            {
+                "content": """Lit 3 Form Component Pattern: Interactive form web component.
+                Template: Form elements with validation and error display
+                Properties: @property for form schema, validation rules
+                Methods: Custom validation, form submission handling
+                Keywords: form, validation, input, lit, web-component, interactive
+                Use Case: Contact forms, login forms, data entry interfaces""",
+                "category": "lit-component-pattern",
+                "tags": ["lit3", "form", "validation", "web-component", "interactive"],
+                "importance": 0.8,
+                "domain": "frontend-development",
+                "language": "lit",
+            },
+            # C++ Class Patterns
+            {
+                "content": """C++ RAII Class Pattern: Resource Acquisition Is Initialization.
+                Header: Constructor acquires resource, destructor releases it
+                Implementation: Exception-safe resource management
+                Features: Copy/move semantics, smart pointers integration
+                Keywords: raii, resource, memory, constructor, destructor, cpp
+                Use Case: File handles, memory management, mutex locks, database connections""",
+                "category": "cpp-class-pattern",
+                "tags": ["cpp", "raii", "resource", "memory", "class", "constructor"],
+                "importance": 0.9,
+                "domain": "systems-programming",
+                "language": "cpp",
+            },
+            {
+                "content": """C++ Observer Pattern Class: Event notification system.
+                Header: Abstract Observer base, Subject with observer list
+                Implementation: Subscribe/unsubscribe methods, notification dispatch
+                Features: Type-safe callbacks, weak pointer usage to avoid cycles
+                Keywords: observer, pattern, event, notification, listener, cpp
+                Use Case: Event systems, MVC architecture, GUI frameworks, signals/slots""",
+                "category": "cpp-class-pattern",
+                "tags": [
+                    "cpp",
+                    "observer",
+                    "pattern",
+                    "event",
+                    "class",
+                    "design-pattern",
+                ],
+                "importance": 0.8,
+                "domain": "systems-programming",
+                "language": "cpp",
+            },
+            {
+                "content": """C++ Template Class Pattern: Generic programming with templates.
+                Header: Template parameter declarations, SFINAE constraints
+                Implementation: Template specializations, concept requirements
+                Features: Type traits, perfect forwarding, variadic templates
+                Keywords: template, generic, metaprogramming, concepts, cpp
+                Use Case: Containers, algorithms, type-safe interfaces, libraries""",
+                "category": "cpp-class-pattern",
+                "tags": ["cpp", "template", "generic", "metaprogramming", "class"],
+                "importance": 0.9,
+                "domain": "systems-programming",
+                "language": "cpp",
+            },
+            {
+                "content": """C++ Singleton Pattern Class: Single instance management.
+                Header: Private constructor, static getInstance method
+                Implementation: Thread-safe initialization, copy prevention
+                Features: Lazy initialization, thread safety, memory cleanup
+                Keywords: singleton, pattern, instance, static, thread-safe, cpp
+                Use Case: Configuration managers, logging systems, database connections""",
+                "category": "cpp-class-pattern",
+                "tags": [
+                    "cpp",
+                    "singleton",
+                    "pattern",
+                    "static",
+                    "class",
+                    "thread-safe",
+                ],
+                "importance": 0.7,
+                "domain": "systems-programming",
+                "language": "cpp",
+            },
         ]
 
     def seed_global_knowledge(self) -> Dict[str, any]:
