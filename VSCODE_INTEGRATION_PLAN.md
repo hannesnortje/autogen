@@ -350,22 +350,43 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 ### Step 28 — VS Code Memory Enhancement UI
 - Branch: `feature/28-memory-ui-enhancement`
 - Scope:
-  - [ ] Add advanced memory visualization in VS Code
-  - [ ] Create interactive memory exploration tools
-  - [ ] Implement memory relationship graphs
-  - [ ] Add memory debugging capabilities
+  - [ ] **Memory Analytics Dashboard Integration**: Connect all 4 Step 27 memory analytics endpoints to VS Code UI
+    - [ ] `/memory/analytics/report` - Comprehensive analytics dashboard with visual charts
+    - [ ] `/memory/analytics/health` - Real-time health monitoring interface with alerts
+    - [ ] `/memory/analytics/metrics` - Live metrics display with performance indicators
+    - [ ] `/memory/analytics/optimize` - Memory optimization controls and pruning management
+  - [ ] **Cross-Project Intelligence Panel**: Integrate all 3 Step 26 cross-project learning endpoints
+    - [ ] `/cross-project/register` - Project registration UI with tech stack configuration
+    - [ ] `/cross-project/recommendations` - Smart recommendations display with similarity scoring
+    - [ ] `/cross-project/analysis` - Pattern analysis visualization with interactive graphs
+  - [ ] **Enhanced Memory Explorer**: Upgrade existing memoryExplorerPanel.ts with analytics
+    - [ ] Analytics-powered memory insights and health status per scope
+    - [ ] Cross-project memory recommendations and pattern suggestions
+    - [ ] Advanced filtering with optimization status and pruning indicators
+    - [ ] Interactive visualization with charts, graphs, and relationship maps
+  - [ ] **Unified Dashboard Enhancement**: Extend existing comprehensive dashboard
+    - [ ] Memory analytics center with real-time metrics and health monitoring
+    - [ ] Cross-project intelligence section with recommendations and patterns
+    - [ ] Advanced data visualization using Chart.js or D3.js integration
+    - [ ] Progressive disclosure of complex analytics features
 - Acceptance:
-  - [ ] Rich memory visualization in VS Code
-  - [ ] Interactive exploration of knowledge graphs
-  - [ ] Visual memory relationship mapping
-  - [ ] Debugging tools for memory issues
+  - [ ] All 7 missing endpoint integrations (4 analytics + 3 cross-project) functional in VS Code
+  - [ ] Enhanced dashboard displays memory health, optimization status, and cross-project insights
+  - [ ] Memory explorer shows analytics data, health indicators, and cross-project suggestions
+  - [ ] Real-time monitoring with WebSocket integration for live analytics updates
+  - [ ] Interactive charts and graphs for memory usage trends and pattern analysis
+  - [ ] Memory optimization controls accessible through VS Code interface
 - Tests:
-  - [ ] UI: memory visualization components
-  - [ ] Integration: VS Code memory tools
-  - [ ] Manual: user experience workflows
+  - [ ] Integration: All Step 26 + Step 27 endpoints connected to VS Code components
+  - [ ] UI: Memory analytics dashboard renders charts, metrics, and health indicators correctly
+  - [ ] Real-time: WebSocket updates for live analytics and health monitoring
+  - [ ] Manual: Complete user workflow from project registration to memory optimization
 - Artifacts:
-  - [ ] Enhanced memory UI components
-  - [ ] ADR-025: Memory visualization architecture
+  - [ ] Enhanced memory analytics dashboard with comprehensive visualization
+  - [ ] Cross-project intelligence panel with interactive recommendations
+  - [ ] Upgraded memory explorer with analytics integration
+  - [ ] Chart.js/D3.js integration for advanced data visualization
+  - [ ] ADR-025: Memory visualization and analytics UI architecture
 
 ## Phase 7: Polish and Distribution
 **Goal**: Prepare extension for distribution and production use.
@@ -409,7 +430,86 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 
 ---
 
-## Status Snapshot
+## MCP Server Endpoint Integration Analysis
+
+### Complete Endpoint Inventory (17 Total)
+
+#### **Core System Endpoints (3) - ✅ INTEGRATED**
+1. `GET /health` - Server health monitoring (integrated in dashboard)
+2. `GET /workspace` - Workspace information (integrated in dashboard)
+3. `POST /workspace/write` - File operations (integrated in workspace service)
+
+#### **Agent Orchestration Endpoints (3) - ✅ INTEGRATED**
+4. `POST /orchestrate/start` - Start sessions (integrated in commands + dashboard)
+5. `POST /orchestrate/stop` - Stop sessions (integrated in commands + dashboard)
+6. `GET /orchestrate/sessions` - List sessions (integrated in session tree view)
+
+#### **Memory Management Endpoints (2) - ✅ PARTIALLY INTEGRATED**
+7. `POST /memory/search` - Memory search (integrated in memory explorer)
+8. `POST /objective/add` - Add objectives (integrated in commands)
+
+#### **Workspace Operations (1) - ✅ INTEGRATED**
+9. `GET /workspace/files` - File listing (integrated in workspace service)
+
+#### **Step 26: Cross-Project Learning Endpoints (3) - ❌ NOT INTEGRATED**
+10. `POST /cross-project/register` - Project registration (MISSING from VS Code)
+11. `POST /cross-project/recommendations` - Cross-project insights (MISSING from VS Code)
+12. `GET /cross-project/analysis` - Pattern analysis (MISSING from VS Code)
+
+#### **Step 27: Memory Analytics Endpoints (4) - ❌ NOT INTEGRATED**
+13. `GET /memory/analytics/report` - Analytics dashboard (MISSING from VS Code)
+14. `GET /memory/analytics/health` - Health monitoring (MISSING from VS Code)
+15. `POST /memory/analytics/optimize` - Memory optimization (MISSING from VS Code)
+16. `GET /memory/analytics/metrics` - Real-time metrics (MISSING from VS Code)
+
+#### **Real-time Communication (1) - ✅ INTEGRATED**
+17. `WebSocket /ws/session/{session_id}` - Real-time updates (integrated in realtime client)
+
+### Current VS Code Dashboard Capabilities
+
+#### **Existing Dashboard Features:**
+- **Server Status Monitoring** - Connection status, server URL, last checked
+- **Session Management** - Active/total sessions, agent counts, conversations
+- **Statistics Overview** - Sessions, agents, conversations, memories
+- **Recent Sessions** - 5 most recent sessions with metadata
+- **Quick Actions** - Start/stop sessions, memory explorer, agent config
+- **Real-time Updates** - Refresh capability and live session updates
+- **Session Export** - Data export functionality
+
+#### **Critical Missing Integrations for Step 28:**
+- **Cross-Project Intelligence** - No UI for Step 26 endpoints (3 missing)
+- **Memory Analytics** - No dashboard for Step 27 endpoints (4 missing)
+- **Advanced Visualization** - No charts, graphs, or data presentation
+- **Health Monitoring** - No system health insights or alerts
+- **Performance Metrics** - No optimization or pruning interfaces
+
+### Step 28 Integration Strategy
+
+#### **Phase 1: Memory Analytics Dashboard (Priority 1)**
+- Integrate `/memory/analytics/report` with visual charts and metrics
+- Add real-time health monitoring from `/memory/analytics/health`
+- Implement live metrics display from `/memory/analytics/metrics`
+- Create optimization controls for `/memory/analytics/optimize`
+
+#### **Phase 2: Cross-Project Intelligence Panel (Priority 2)**
+- Build project registration interface for `/cross-project/register`
+- Display smart recommendations from `/cross-project/recommendations`
+- Visualize pattern analysis from `/cross-project/analysis`
+- Integrate cross-project context into existing memory explorer
+
+#### **Phase 3: Enhanced Memory Explorer (Priority 3)**
+- Upgrade existing memoryExplorerPanel.ts with analytics integration
+- Add health indicators and optimization status per memory scope
+- Include cross-project memory suggestions and pattern insights
+- Implement advanced filtering and interactive visualization
+
+#### **Architecture Improvements:**
+- **Avoid Redundancies** - Enhance existing components vs. creating new ones
+- **Modular Design** - Reusable analytics widgets and chart components
+- **Progressive Disclosure** - Complex analytics behind expandable sections
+- **Real-time Integration** - WebSocket updates for live analytics data
+
+---
 - [x] Step 14 — Connect Real Services to MCP Server
 - [x] Step 15 — Add File Operations and WebSocket Support
 - [x] Step 16 — VS Code Extension Scaffold
@@ -423,9 +523,9 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 - [x] **Step 24 — Knowledge Seeding and Management ✅ COMPLETED**
 - [x] **Step 24.5 — VS Code Extension Auto-Start Enhancement ✅ COMPLETED**
 - [x] **Step 25 — Artifact Memory Integration ✅ COMPLETED**
-- [x] Step 26 — Cross-Project Memory Learning
-- [x] Step 27 — Memory Analytics and Optimization
-- [ ] Step 28 — VS Code Memory Enhancement UI
+- [x] **Step 26 — Cross-Project Memory Learning ✅ COMPLETED**
+- [x] **Step 27 — Memory Analytics and Optimization ✅ COMPLETED**
+- [ ] **Step 28 — VS Code Memory Enhancement UI ← CURRENT**
 - [ ] Step 29 — Extension Testing and Packaging
 - [ ] Step 30 — Documentation and User Guide
 
@@ -460,52 +560,97 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 
 ## Future Recommendations
 
-### Critical Memory System Requirements (Steps 21-23)
-- **Schema Redesign**: Replace single generic collection with proper multi-scope collections
-- **Global Knowledge**: Pre-seed with PDCA, OOP principles, coding standards, security rules
-- **Search Implementation**: Connect MCP server to actual HybridSearchService (currently returns empty results)
-- **Agent Hooks**: Add memory read/write to AutoGen agent workflows
-- **Tiered Search**: Implement thread → project → objectives → agent → global search order
-- **Context Retention**: Enable agents to learn from previous sessions
+### Step 28 Implementation Priorities
 
-### Memory Integration Architecture (Phase 4)
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Global        │    │   Project       │    │   Agent         │
-│   Collection    │    │   Collection    │    │   Collection    │
-│                 │    │                 │    │                 │
-│ • PDCA, OOP     │    │ • ADRs, APIs    │    │ • Preferences   │
-│ • Standards     │    │ • Known Issues  │    │ • Capabilities  │
-│ • Security      │    │ • Decisions     │    │ • Learning      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   Hybrid Search │
-                    │   Service       │
-                    │                 │
-                    │ • Tiered Order  │
-                    │ • Dense+Sparse  │
-                    │ • Scope Filter  │
-                    └─────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   AutoGen       │
-                    │   Agents        │
-                    │                 │
-                    │ • Memory Hooks  │
-                    │ • Context Aware │
-                    │ • Learning      │
-                    └─────────────────┘
-```
+#### **Critical Missing Features (Phase 1):**
+1. **Memory Analytics Dashboard Integration**
+   - Connect all 4 Step 27 memory analytics endpoints to VS Code UI
+   - Implement real-time health monitoring with alerts and recommendations
+   - Add memory optimization controls and pruning management interface
+   - Create comprehensive analytics reports with visual charts and metrics
 
-### Enhanced Memory Features (Steps 24-28)
-- **Knowledge Management**: Automatic summarization, intelligent pruning, export/import
-- **Artifact Integration**: Link memory to Git commits, PRs, build reports, test results
-- **Cross-Project Learning**: Pattern recognition and solution reuse across projects
-- **Memory Analytics**: Usage metrics, performance optimization, health monitoring
-- **Advanced UI**: Memory visualization, relationship graphs, debugging tools
+2. **Cross-Project Intelligence Panel**
+   - Integrate all 3 Step 26 cross-project learning endpoints
+   - Build project registration UI with tech stack configuration
+   - Display smart recommendations with similarity scoring and pattern analysis
+   - Add interactive visualization for cross-project relationships
+
+3. **Enhanced Memory Explorer**
+   - Upgrade existing memoryExplorerPanel.ts with analytics integration
+   - Add health status indicators and optimization alerts per memory scope
+   - Include cross-project memory suggestions and pattern insights
+   - Implement advanced filtering with analytics-powered recommendations
+
+#### **UI Architecture Enhancements (Phase 2):**
+- **Advanced Data Visualization** - Chart.js or D3.js integration for analytics
+- **Real-time Monitoring** - WebSocket integration for live analytics updates
+- **Progressive Disclosure** - Smart organization of complex analytics features
+- **Modular Components** - Reusable analytics widgets and chart components
+
+#### **Integration Strategy:**
+- **Enhance vs. Replace** - Upgrade existing dashboard and memory explorer
+- **Avoid Redundancies** - Integrate analytics into current statistics displays
+- **Unified Experience** - Cohesive interface across all memory and analytics features
+- **Performance Optimization** - Efficient data fetching and caching for analytics
+
+### Critical Memory System Achievements (Steps 21-27) ✅
+
+#### **Foundation Complete:**
+- ✅ **Multi-scope Memory Schema**: Proper collections for global, project, agent, thread, objectives, artifacts
+- ✅ **Working Embeddings**: 384-dimensional vectors with auto_embed=True functionality
+- ✅ **Operational Search**: HybridSearchService returning relevant results with 0.755 similarity scores
+- ✅ **Complete Pipeline**: write → embed → store → search → retrieve cycle working
+- ✅ **Memory-Aware Agents**: All 8 agent types connected to memory system with persistent learning
+- ✅ **Cross-Session Continuity**: Agents remember decisions and context across different sessions
+- ✅ **Performance Analytics**: Agent interaction tracking with decision patterns and insights
+- ✅ **Knowledge Management**: Comprehensive 4-service system with automatic seeding, summarization, pruning, and export/import
+- ✅ **Artifact Memory Integration**: Complete development lifecycle memory with Git, builds, and code reviews
+- ✅ **Cross-Project Learning**: Intelligent solution reuse, pattern recognition, and best practice propagation
+- ✅ **Memory Analytics**: Advanced optimization, health monitoring, and performance metrics
+
+### Enhanced Memory Features Architecture
+```
+┌─────────────────────────────────────────────────────────┐
+│                    VS Code Extension                    │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────┐  │
+│  │ Analytics       │  │ Cross-Project   │  │ Memory  │  │
+│  │ Dashboard       │  │ Intelligence    │  │ Explorer│  │
+│  │                 │  │                 │  │         │  │
+│  │ • Health Monitor│  │ • Registration  │  │ • Search│  │
+│  │ • Optimization  │  │ • Recommendations│  │ • Health│  │
+│  │ • Metrics       │  │ • Pattern Analysis│  │ • Charts│  │
+│  │ • Reports       │  │ • Similarity    │  │ • Filter│  │
+│  └─────────────────┘  └─────────────────┘  └─────────┘  │
+└─────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────┐
+│                     MCP Server                          │
+│                                                         │
+│  Step 26: Cross-Project    │    Step 27: Analytics     │
+│  ┌──────────────────────┐  │  ┌──────────────────────┐  │
+│  │ /cross-project/      │  │  │ /memory/analytics/   │  │
+│  │ • register           │  │  │ • report             │  │
+│  │ • recommendations    │  │  │ • health             │  │
+│  │ • analysis           │  │  │ • optimize           │  │
+│  └──────────────────────┘  │  │ • metrics            │  │
+│                            │  └──────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────┐
+│                 Memory System Backend                   │
+│                                                         │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐ │
+│ │   Global    │ │   Project   │ │ Memory Analytics    │ │
+│ │ Collection  │ │ Collection  │ │ • HealthMonitor     │ │
+│ │             │ │             │ │ • MetricsCollector  │ │
+│ │ • PDCA, OOP │ │ • ADRs      │ │ • IntelligentPruner │ │
+│ │ • Standards │ │ • Patterns  │ │ • AnalyticsService  │ │
+│ │ • Security  │ │ • Solutions │ │                     │ │
+│ └─────────────┘ └─────────────┘ └─────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
 
 ### Extension Architecture Improvements
 - **WebSocket Robustness**: Add reconnection logic with exponential backoff for better resilience against network issues
@@ -549,28 +694,51 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 
 ## Next Steps (Updated Priority Order)
 
-**CRITICAL: Cross-Project Memory Learning Complete ✅**
+**READY FOR STEP 28: VS Code Memory Enhancement UI**
 
-Based on successful completion of Steps 21-26, the system now has:
-- ✅ **Multi-scope Memory Schema**: Proper collections for global, project, agent, thread, objectives, artifacts
-- ✅ **Working Embeddings**: 384-dimensional vectors with auto_embed=True functionality
-- ✅ **Operational Search**: HybridSearchService returning relevant results with 0.755 similarity scores
-- ✅ **Complete Pipeline**: write → embed → store → search → retrieve cycle working
-- ✅ **Memory-Aware Agents**: All 8 agent types connected to memory system with persistent learning
-- ✅ **Cross-Session Continuity**: Agents remember decisions and context across different sessions
-- ✅ **Performance Analytics**: Agent interaction tracking with decision patterns and insights
-- ✅ **Knowledge Management**: Comprehensive 4-service system with automatic seeding, summarization, pruning, and export/import
+With the successful completion of Steps 21-27, we now have a comprehensive foundation:
+
+### **Completed Infrastructure (Steps 21-27) ✅**
+- ✅ **Multi-scope Memory System**: Proper collections with structured schemas and global knowledge
+- ✅ **Operational Search Pipeline**: HybridSearchService with 0.755+ similarity scores and embedding integration
+- ✅ **Memory-Aware Agents**: All 8 agent types with persistent learning and cross-session continuity
+- ✅ **Knowledge Management**: Automatic seeding, summarization, pruning, and export/import capabilities
 - ✅ **Artifact Memory Integration**: Complete development lifecycle memory with Git, builds, and code reviews
 - ✅ **Cross-Project Learning**: Intelligent solution reuse, pattern recognition, and best practice propagation
-- ✅ **Production-Ready Features**: Dry-run safety, health monitoring, configurable thresholds, and error handling
+- ✅ **Memory Analytics**: Comprehensive optimization, health monitoring, and performance metrics
 
-**NEXT STEP: VS Code Memory Enhancement UI (Step 28)**
-Ready to begin advanced memory visualization and interactive tools for VS Code integration.
+### **Current Challenge: Missing VS Code Integration**
+**7 Endpoint Integrations Missing:**
+- 4 Step 27 Memory Analytics endpoints (`/memory/analytics/*`) - No VS Code interface
+- 3 Step 26 Cross-Project Learning endpoints (`/cross-project/*`) - No VS Code interface
 
-The cross-project learning foundation is complete and operational. The next priority is:
-- **Memory Usage Analytics**: Track and analyze memory system performance and utilization
-- **Query Optimization**: Improve search performance and relevance scoring
-- **Memory Lifecycle Management**: Automated cleanup, archiving, and optimization
-- **Advanced Analytics**: Deep insights into memory patterns and agent learning effectiveness
+### **Step 28 Implementation Phases:**
 
-**Impact**: With comprehensive cross-project learning in place, agents can now leverage solutions from similar projects, automatically apply best practices (PDCA, SOLID, OOP), and provide intelligent recommendations based on foundational patterns and project-specific insights.
+#### **Phase 1: Memory Analytics Dashboard (Weeks 1-2)**
+- Connect `/memory/analytics/report` → Comprehensive dashboard with visual charts
+- Connect `/memory/analytics/health` → Real-time health monitoring with alerts
+- Connect `/memory/analytics/metrics` → Live metrics display with performance indicators
+- Connect `/memory/analytics/optimize` → Memory optimization controls and pruning management
+
+#### **Phase 2: Cross-Project Intelligence (Weeks 3-4)**
+- Connect `/cross-project/register` → Project registration UI with tech stack configuration
+- Connect `/cross-project/recommendations` → Smart recommendations display with similarity scoring
+- Connect `/cross-project/analysis` → Pattern analysis visualization with interactive graphs
+
+#### **Phase 3: Enhanced Visualization (Weeks 5-6)**
+- Upgrade existing memoryExplorerPanel.ts with analytics integration
+- Add Chart.js/D3.js for advanced data visualization
+- Implement real-time WebSocket updates for live analytics
+- Create progressive disclosure for complex analytics features
+
+### **Success Metrics for Step 28:**
+- ✅ All 7 missing endpoint integrations functional in VS Code
+- ✅ Enhanced dashboard displays memory health, optimization status, and cross-project insights
+- ✅ Memory explorer shows analytics data, health indicators, and cross-project suggestions
+- ✅ Real-time monitoring with WebSocket integration for live analytics updates
+- ✅ Interactive charts and graphs for memory usage trends and pattern analysis
+- ✅ Memory optimization controls accessible through VS Code interface
+
+**IMPACT**: Step 28 will complete the VS Code integration by providing visual access to all advanced memory capabilities, making the sophisticated backend analytics and cross-project intelligence accessible through an intuitive user interface.
+
+The foundation is solid and ready. Time to build the UI that showcases the powerful memory system we've created!
