@@ -45,9 +45,11 @@ class HybridSearchService:
         self, collection: str, query: str, k: int, scope: str
     ) -> List[dict]:
         vec = self.embed.encode_one(query)
-        # Filter by scope in Qdrant
+        # Filter by scope in Qdrant - IMPORTANT: with_vector=True to get vectors
         must = [{"key": "scope", "match": {"value": scope}}]
-        res = self.qdrant.scroll(collection, must=must, limit=1000, with_payload=True)
+        res = self.qdrant.scroll(
+            collection, must=must, limit=1000, with_payload=True, with_vector=True
+        )
         points = res.get("result", {}).get("points", [])
         # If no points, return empty
         if not points:
@@ -57,7 +59,7 @@ class HybridSearchService:
 
         scored = []
         for p in points:
-            v = p.get("vector") or p.get("payload", {}).get("vector")
+            v = p.get("vector")
             if v is None:
                 continue
             score = float(

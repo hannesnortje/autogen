@@ -118,16 +118,40 @@ class QdrantWrapper:
         must: Optional[List[Dict[str, Any]]] = None,
         limit: int = 100,
         with_payload: bool = True,
+        with_vector: bool = False,
     ) -> Dict[str, Any]:
         body: Dict[str, Any] = {
             "limit": limit,
             "with_payload": with_payload,
+            "with_vector": with_vector,
         }
         if must:
             body["filter"] = {"must": must}
         resp = self.session.post(
             self._url(f"/collections/{collection}/points/scroll"),
             json=body,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def retrieve_point(
+        self,
+        collection: str,
+        point_id: str,
+        with_payload: bool = True,
+        with_vector: bool = False,
+    ) -> Dict[str, Any]:
+        """Retrieve a specific point by ID."""
+        params = {}
+        if with_payload:
+            params["with_payload"] = "true"
+        if with_vector:
+            params["with_vectors"] = "true"
+
+        resp = self.session.get(
+            self._url(f"/collections/{collection}/points/{point_id}"),
+            params=params,
             timeout=10,
         )
         resp.raise_for_status()

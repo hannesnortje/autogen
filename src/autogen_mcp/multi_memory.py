@@ -17,6 +17,7 @@ from autogen_mcp.collections import (
     MemoryScope,
 )
 from autogen_mcp.embeddings import EmbeddingService
+from autogen_mcp.hybrid_search_service import HybridSearchService
 from autogen_mcp.knowledge_seeder import KnowledgeSeeder
 from autogen_mcp.observability import get_logger
 
@@ -44,6 +45,7 @@ class MultiScopeMemoryService:
     ):
         self.collection_manager = collection_manager or CollectionManager()
         self.embedding_service = EmbeddingService()
+        self.hybrid_search = HybridSearchService()
         self.knowledge_seeder = KnowledgeSeeder(self.collection_manager)
         self.logger = get_logger("autogen.multi_memory", correlation_id=correlation_id)
         self._initialized = False
@@ -307,6 +309,55 @@ class MultiScopeMemoryService:
                 "dimension": self.embedding_service.dim(),
             },
         }
+
+    def search(
+        self, query: str, scope: str = "global", limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Search memory across scopes using hybrid search."""
+        if not self._initialized:
+            raise RuntimeError(
+                "Memory service not initialized. Call initialize() first."
+            )
+
+        # Map scope string to MemoryScope enum
+        scope_mapping = {
+            "global": MemoryScope.GLOBAL,
+            "project": MemoryScope.PROJECT,
+            "agent": MemoryScope.AGENT,
+            "thread": MemoryScope.THREAD,
+            "objectives": MemoryScope.OBJECTIVES,
+            "artifacts": MemoryScope.ARTIFACTS,
+        }
+
+        memory_scope = scope_mapping.get(scope.lower(), MemoryScope.GLOBAL)
+
+        # Get collection name
+        project_id = (
+            self._current_project if memory_scope == MemoryScope.PROJECT else None
+        )
+        collection_name = self.collection_manager.get_collection_name(
+            memory_scope, project_id
+        )
+
+        # Perform hybrid search
+        results = self.hybrid_search.search(
+            collection=collection_name, query=query, k=limit, scopes=[scope.lower()]
+        )
+
+        # Transform results to expected format
+        formatted_results = []
+        for result in results:
+            formatted_results.append(
+                {
+                    "id": result.get("id"),
+                    "content": result.get("metadata", {}).get("content", ""),
+                    "score": result.get("score", 0.0),
+                    "scope": result.get("scope", scope),
+                    "metadata": result.get("metadata", {}),
+                }
+            )
+
+        return formatted_results
 
     # Convenience methods for easy access
     def write_global(
