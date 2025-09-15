@@ -18,6 +18,7 @@ from autogen_mcp.gemini_client import GeminiClient
 from autogen_mcp.observability import get_logger
 from autogen_mcp.artifact_memory import ArtifactMemoryService
 from autogen_mcp.cross_project_learning import CrossProjectLearningService
+from autogen_mcp.memory_analytics import MemoryAnalyticsService, PruningStrategy
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,6 +33,9 @@ hybrid_search = HybridSearchService(HybridConfig())
 # Initialize artifact memory and cross-project learning services
 artifact_service = ArtifactMemoryService(memory_service)
 cross_project_service = CrossProjectLearningService(memory_service, artifact_service)
+
+# Initialize memory analytics service
+memory_analytics_service = MemoryAnalyticsService(memory_service)
 
 # Initialize Gemini client only if API key is available
 try:
@@ -525,6 +529,12 @@ class ProjectRecommendationsRequest(BaseModel):
     project_id: str
 
 
+class MemoryOptimizationRequest(BaseModel):
+    strategy: str = "hybrid"  # lru, importance, frequency, hybrid
+    target_reduction_percent: float = 15.0
+    dry_run: bool = False
+
+
 @app.post("/cross-project/register")
 async def register_project(req: RegisterProjectRequest):
     """Register a project for cross-project learning"""
@@ -648,6 +658,231 @@ async def get_cross_project_analysis():
         )
 
 
+# --- Memory Analytics Endpoints ---
+
+
+@app.get("/memory/analytics/report")
+async def get_memory_analytics_report():
+    """Get comprehensive memory analytics report"""
+    try:
+        logger.info("Generating memory analytics report")
+
+        report = await memory_analytics_service.get_analytics_report()
+
+        logger.info(
+            "Memory analytics report generated",
+            extra={
+                "extra": {
+                    "total_entries": report["metrics"]["storage"]["total_entries"],
+                    "memory_utilization": report["metrics"]["health"][
+                        "memory_utilization"
+                    ],
+                    "health_status": report["health_status"],
+                    "alerts_count": len(report["alerts"]),
+                }
+            },
+        )
+
+        return {"report": report, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+    except Exception as e:
+        logger.error(
+            "Failed to generate memory analytics report",
+            extra={"extra": {"error": str(e)}},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Memory analytics report failed: {str(e)}",
+        )
+
+
+@app.get("/memory/analytics/health")
+async def get_memory_health():
+    """Get memory system health status and alerts"""
+    try:
+        logger.info("Checking memory health")
+
+        health_status, alerts = (
+            await memory_analytics_service.health_monitor.check_health()
+        )
+
+        health_report = {
+            "status": health_status,
+            "alerts": [
+                {
+                    "severity": alert.severity,
+                    "message": alert.message,
+                    "metric": alert.metric_name,
+                    "current_value": alert.current_value,
+                    "threshold": alert.threshold,
+                    "recommendations": alert.recommendations,
+                    "timestamp": alert.timestamp.isoformat(),
+                }
+                for alert in alerts
+            ],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        logger.info(
+            "Memory health check completed",
+            extra={
+                "extra": {
+                    "status": health_status,
+                    "alerts_count": len(alerts),
+                }
+            },
+        )
+
+        return health_report
+
+    except Exception as e:
+        logger.error(
+            "Failed to check memory health",
+            extra={"extra": {"error": str(e)}},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Memory health check failed: {str(e)}",
+        )
+
+
+@app.post("/memory/analytics/optimize")
+async def optimize_memory(req: MemoryOptimizationRequest):
+    """Execute memory optimization with specified strategy"""
+    try:
+        logger.info(
+            "Starting memory optimization",
+            extra={
+                "extra": {
+                    "strategy": req.strategy,
+                    "target_reduction": req.target_reduction_percent,
+                    "dry_run": req.dry_run,
+                }
+            },
+        )
+
+        # Validate strategy
+        valid_strategies = ["lru", "importance", "frequency", "hybrid"]
+        if req.strategy not in valid_strategies:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid strategy. Must be one of: {valid_strategies}",
+            )
+
+        # Map string to enum
+        strategy_mapping = {
+            "lru": PruningStrategy.LRU,
+            "importance": PruningStrategy.IMPORTANCE_BASED,
+            "frequency": PruningStrategy.ACCESS_FREQUENCY,
+            "hybrid": PruningStrategy.HYBRID,
+        }
+
+        strategy = strategy_mapping[req.strategy]
+
+        optimization_report = await memory_analytics_service.optimize_memory(
+            strategy=strategy,
+            target_reduction_percent=req.target_reduction_percent,
+            dry_run=req.dry_run,
+        )
+
+        logger.info(
+            "Memory optimization completed",
+            extra={
+                "extra": {
+                    "entries_removed": optimization_report["results"][
+                        "entries_removed"
+                    ],
+                    "bytes_freed": optimization_report["results"]["bytes_freed"],
+                    "execution_time_ms": optimization_report["results"][
+                        "execution_time_ms"
+                    ],
+                    "dry_run": req.dry_run,
+                }
+            },
+        )
+
+        return {
+            "optimization_report": optimization_report,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to optimize memory",
+            extra={"extra": {"error": str(e)}},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Memory optimization failed: {str(e)}",
+        )
+
+
+@app.get("/memory/analytics/metrics")
+async def get_memory_metrics():
+    """Get detailed memory metrics"""
+    try:
+        logger.info("Collecting memory metrics")
+
+        metrics = await memory_analytics_service.metrics_collector.collect_metrics()
+
+        metrics_response = {
+            "storage": {
+                "total_entries": metrics.total_entries,
+                "total_size_bytes": metrics.total_size_bytes,
+                "total_size_mb": metrics.total_size_bytes / 1024 / 1024,
+                "collections_count": metrics.collections_count,
+                "average_entry_size_bytes": metrics.average_entry_size,
+            },
+            "performance": {
+                "average_search_time_ms": metrics.average_search_time_ms,
+                "average_write_time_ms": metrics.average_write_time_ms,
+                "cache_hit_ratio": metrics.cache_hit_ratio,
+                "query_success_rate": metrics.query_success_rate,
+            },
+            "access_patterns": {
+                "read_operations": metrics.read_operations,
+                "write_operations": metrics.write_operations,
+                "search_operations": metrics.search_operations,
+            },
+            "health": {
+                "memory_utilization": metrics.memory_utilization,
+                "fragmentation_ratio": metrics.fragmentation_ratio,
+                "oldest_entry_age_days": metrics.oldest_entry_age_days,
+                "stale_entries_count": metrics.stale_entries_count,
+            },
+            "scope_metrics": {
+                scope.value: scope_data
+                for scope, scope_data in metrics.scope_metrics.items()
+            },
+            "collected_at": metrics.collected_at.isoformat(),
+        }
+
+        logger.info(
+            "Memory metrics collected",
+            extra={
+                "extra": {
+                    "total_entries": metrics.total_entries,
+                    "total_size_mb": metrics.total_size_bytes / 1024 / 1024,
+                    "collections_count": metrics.collections_count,
+                }
+            },
+        )
+
+        return metrics_response
+
+    except Exception as e:
+        logger.error(
+            "Failed to collect memory metrics",
+            extra={"extra": {"error": str(e)}},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Memory metrics collection failed: {str(e)}",
+        )
+
+
 # --- WebSocket Endpoints ---
 
 
@@ -681,6 +916,9 @@ async def startup_event():
 
         # Seed global knowledge
         knowledge_seeder.seed_global_knowledge()
+
+        # Start memory analytics monitoring
+        await memory_analytics_service.start_monitoring()
 
         # Verify system health
         health_status = collection_manager.health_check()
