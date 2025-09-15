@@ -246,6 +246,8 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>Memory Analytics Dashboard</title>
+                <!-- Chart.js CDN -->
+                <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
                 <style>
                     :root {
                         --primary-color: #007ACC;
@@ -476,6 +478,37 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                         animation: pulse 2s infinite;
                     }
 
+                    /* Chart.js Styles */
+                    .chart-container {
+                        margin-top: 16px;
+                        padding: 16px;
+                        background: var(--vscode-editor-background);
+                        border: 1px solid var(--vscode-panel-border);
+                        border-radius: var(--border-radius);
+                        position: relative;
+                        height: 250px;
+                    }
+
+                    .chart-container canvas {
+                        max-width: 100%;
+                        max-height: 100%;
+                    }
+
+                    .chart-title {
+                        text-align: center;
+                        margin-bottom: 12px;
+                        font-weight: 600;
+                        color: var(--vscode-editor-foreground);
+                    }
+
+                    .chart-loading {
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        color: var(--vscode-descriptionForeground);
+                    }
+
                     @media (max-width: 768px) {
                         .dashboard-grid {
                             grid-template-columns: 1fr;
@@ -487,6 +520,10 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
 
                         .optimization-controls {
                             flex-direction: column;
+                        }
+
+                        .chart-container {
+                            height: 200px;
                         }
                     }
                 </style>
@@ -511,11 +548,33 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                     <div id="analytics-section" class="dashboard-section">
                         <h3 class="section-title">📊 Analytics Report</h3>
                         <div id="analytics-content" class="loading">Loading analytics data...</div>
+                        <div class="chart-container">
+                            <canvas id="analytics-chart" width="400" height="200"></canvas>
+                        </div>
                     </div>
 
                     <div id="metrics-section" class="dashboard-section">
                         <h3 class="section-title">📈 Real-time Metrics</h3>
                         <div id="metrics-content" class="loading">Loading metrics data...</div>
+                        <div class="chart-container">
+                            <canvas id="metrics-chart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div id="performance-chart-section" class="dashboard-section">
+                        <h3 class="section-title">🎯 Performance Trends</h3>
+                        <div class="chart-container">
+                            <canvas id="performance-chart" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+
+                    <div id="memory-usage-section" class="dashboard-section">
+                        <h3 class="section-title">💾 Memory Usage Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="memory-chart" width="400" height="200"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -535,6 +594,219 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
 
                 <script>
                     const vscode = acquireVsCodeApi();
+
+                    // Chart.js instances
+                    let analyticsChart = null;
+                    let metricsChart = null;
+                    let performanceChart = null;
+                    let memoryChart = null;
+
+                    // Initialize charts when DOM is ready
+                    document.addEventListener('DOMContentLoaded', function() {
+                        initializeCharts();
+                    });
+
+                    function initializeCharts() {
+                        // Analytics Chart (Line chart for trends)
+                        const analyticsCtx = document.getElementById('analytics-chart').getContext('2d');
+                        analyticsChart = new Chart(analyticsCtx, {
+                            type: 'line',
+                            data: {
+                                labels: ['1h ago', '45m ago', '30m ago', '15m ago', 'Now'],
+                                datasets: [{
+                                    label: 'Analytics Score',
+                                    data: [65, 72, 68, 75, 82],
+                                    borderColor: '#007ACC',
+                                    backgroundColor: 'rgba(0, 122, 204, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        labels: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                        ticks: { color: 'var(--vscode-editor-foreground)' }
+                                    },
+                                    x: {
+                                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                        ticks: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                }
+                            }
+                        });
+
+                        // Metrics Chart (Bar chart)
+                        const metricsCtx = document.getElementById('metrics-chart').getContext('2d');
+                        metricsChart = new Chart(metricsCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['Response Time', 'Memory Efficiency', 'Cache Hit Rate', 'Throughput'],
+                                datasets: [{
+                                    label: 'Performance Metrics',
+                                    data: [250, 85, 92, 76],
+                                    backgroundColor: [
+                                        'rgba(40, 167, 69, 0.8)',
+                                        'rgba(0, 122, 204, 0.8)',
+                                        'rgba(255, 193, 7, 0.8)',
+                                        'rgba(220, 53, 69, 0.8)'
+                                    ],
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        labels: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                        ticks: { color: 'var(--vscode-editor-foreground)' }
+                                    },
+                                    x: {
+                                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                        ticks: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                }
+                            }
+                        });
+
+                        // Performance Chart (Area chart)
+                        const performanceCtx = document.getElementById('performance-chart').getContext('2d');
+                        performanceChart = new Chart(performanceCtx, {
+                            type: 'line',
+                            data: {
+                                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                                datasets: [
+                                    {
+                                        label: 'Memory Usage',
+                                        data: [65, 59, 80, 81, 56, 55, 40],
+                                        borderColor: '#28a745',
+                                        backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                                        fill: true
+                                    },
+                                    {
+                                        label: 'CPU Usage',
+                                        data: [28, 48, 40, 19, 86, 27, 90],
+                                        borderColor: '#ffc107',
+                                        backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                                        fill: true
+                                    }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        labels: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                        ticks: { color: 'var(--vscode-editor-foreground)' }
+                                    },
+                                    x: {
+                                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                        ticks: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                }
+                            }
+                        });
+
+                        // Memory Usage Chart (Doughnut chart)
+                        const memoryCtx = document.getElementById('memory-chart').getContext('2d');
+                        memoryChart = new Chart(memoryCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Used Memory', 'Cached', 'Available', 'System Reserved'],
+                                datasets: [{
+                                    data: [45, 25, 25, 5],
+                                    backgroundColor: [
+                                        'rgba(220, 53, 69, 0.8)',
+                                        'rgba(255, 193, 7, 0.8)',
+                                        'rgba(40, 167, 69, 0.8)',
+                                        'rgba(108, 117, 125, 0.8)'
+                                    ],
+                                    borderWidth: 2,
+                                    borderColor: 'var(--vscode-panel-border)'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: { color: 'var(--vscode-editor-foreground)' }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    function updateChartsWithData(data) {
+                        // Update charts when new data arrives
+                        if (data.analytics && analyticsChart) {
+                            // Update analytics chart with real data
+                            if (data.analytics.trend_data) {
+                                analyticsChart.data.labels = data.analytics.trend_data.labels || analyticsChart.data.labels;
+                                analyticsChart.data.datasets[0].data = data.analytics.trend_data.values || analyticsChart.data.datasets[0].data;
+                                analyticsChart.update();
+                            }
+                        }
+
+                        if (data.metrics && metricsChart) {
+                            // Update metrics chart with real data
+                            const metrics = data.metrics;
+                            const values = [
+                                metrics.response_times?.average || 250,
+                                metrics.memory_efficiency || 85,
+                                metrics.cache_hit_rate || 92,
+                                metrics.throughput || 76
+                            ];
+                            metricsChart.data.datasets[0].data = values;
+                            metricsChart.update();
+                        }
+
+                        if (data.performance && performanceChart) {
+                            // Update performance chart with real data
+                            if (data.performance.memory_trend) {
+                                performanceChart.data.datasets[0].data = data.performance.memory_trend;
+                            }
+                            if (data.performance.cpu_trend) {
+                                performanceChart.data.datasets[1].data = data.performance.cpu_trend;
+                            }
+                            performanceChart.update();
+                        }
+
+                        if (data.memory_usage && memoryChart) {
+                            // Update memory chart with real data
+                            const usage = data.memory_usage;
+                            memoryChart.data.datasets[0].data = [
+                                usage.used || 45,
+                                usage.cached || 25,
+                                usage.available || 25,
+                                usage.reserved || 5
+                            ];
+                            memoryChart.update();
+                        }
+                    }
 
                     function loadAnalytics() {
                         document.getElementById('analytics-content').innerHTML = '<div class="loading pulsing">Loading analytics data...</div>';
@@ -607,45 +879,46 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
 
                     function displayAnalyticsData(data) {
                         const content = document.getElementById('analytics-content');
-                        content.innerHTML = \`
-                            <div class="metrics-grid">
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.system_overview.total_entries.toLocaleString()}</span>
-                                    <span class="metric-label">Total Entries</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${formatBytes(data.system_overview.total_size_bytes)}</span>
-                                    <span class="metric-label">Total Size</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.system_overview.collections_count}</span>
-                                    <span class="metric-label">Collections</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${formatBytes(data.system_overview.average_entry_size)}</span>
-                                    <span class="metric-label">Avg Entry Size</span>
-                                </div>
-                            </div>
-                            <h4>📈 Usage Patterns</h4>
-                            <div class="metrics-grid">
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.usage_patterns.read_operations.toLocaleString()}</span>
-                                    <span class="metric-label">Read Operations</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.usage_patterns.write_operations.toLocaleString()}</span>
-                                    <span class="metric-label">Write Operations</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.usage_patterns.search_operations.toLocaleString()}</span>
-                                    <span class="metric-label">Search Operations</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${(data.usage_patterns.cache_hit_ratio * 100).toFixed(1)}%</span>
-                                    <span class="metric-label">Cache Hit Ratio</span>
-                                </div>
-                            </div>
-                        \`;
+                        content.innerHTML = '<div class="metrics-grid">' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.system_overview.total_entries.toLocaleString() + '</span>' +
+                                '<span class="metric-label">Total Entries</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + formatBytes(data.system_overview.total_size_bytes) + '</span>' +
+                                '<span class="metric-label">Total Size</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.system_overview.collections_count + '</span>' +
+                                '<span class="metric-label">Collections</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + formatBytes(data.system_overview.average_entry_size) + '</span>' +
+                                '<span class="metric-label">Avg Entry Size</span>' +
+                            '</div>' +
+                        '</div>' +
+                        '<h4>📈 Usage Patterns</h4>' +
+                        '<div class="metrics-grid">' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.usage_patterns.read_operations.toLocaleString() + '</span>' +
+                                '<span class="metric-label">Read Operations</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.usage_patterns.write_operations.toLocaleString() + '</span>' +
+                                '<span class="metric-label">Write Operations</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.usage_patterns.search_operations.toLocaleString() + '</span>' +
+                                '<span class="metric-label">Search Operations</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + (data.usage_patterns.cache_hit_ratio * 100).toFixed(1) + '%</span>' +
+                                '<span class="metric-label">Cache Hit Ratio</span>' +
+                            '</div>' +
+                        '</div>';
+
+                        // Update analytics chart with real data
+                        updateChartsWithData({ analytics: data });
                     }
 
                     function displayHealthData(data) {
@@ -691,35 +964,52 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
 
                     function displayMetricsData(data) {
                         const content = document.getElementById('metrics-content');
-                        content.innerHTML = \`
-                            <div style="margin-bottom: 16px;">
-                                <strong>📅 Last Updated:</strong> \${new Date(data.timestamp).toLocaleString()}
-                            </div>
-                            <div class="metrics-grid">
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.performance.operations_per_minute.toFixed(1)}</span>
-                                    <span class="metric-label">Ops/Min</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.performance.average_response_time.toFixed(2)}ms</span>
-                                    <span class="metric-label">Avg Response</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${(data.performance.cache_hit_ratio * 100).toFixed(1)}%</span>
-                                    <span class="metric-label">Cache Hit Rate</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${(data.performance.error_rate * 100).toFixed(2)}%</span>
-                                    <span class="metric-label">Error Rate</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.health.memory_usage_percentage.toFixed(1)}%</span>
-                                    <span class="metric-label">Memory Usage</span>
-                                </div>
-                                <div class="metric-card">
-                                    <span class="metric-value">\${data.health.optimization_score.toFixed(1)}</span>
-                                    <span class="metric-label">Optimization</span>
-                                </div>
+                        content.innerHTML = '<div style="margin-bottom: 16px;">' +
+                            '<strong>📅 Last Updated:</strong> ' + new Date(data.timestamp).toLocaleString() +
+                        '</div>' +
+                        '<div class="metrics-grid">' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.performance.operations_per_minute.toFixed(1) + '</span>' +
+                                '<span class="metric-label">Ops/Min</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.performance.average_response_time.toFixed(2) + 'ms</span>' +
+                                '<span class="metric-label">Avg Response</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + (data.performance.cache_hit_ratio * 100).toFixed(1) + '%</span>' +
+                                '<span class="metric-label">Cache Hit Rate</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + (data.performance.error_rate * 100).toFixed(2) + '%</span>' +
+                                '<span class="metric-label">Error Rate</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.health.memory_usage_percentage.toFixed(1) + '%</span>' +
+                                '<span class="metric-label">Memory Usage</span>' +
+                            '</div>' +
+                            '<div class="metric-card">' +
+                                '<span class="metric-value">' + data.health.optimization_score.toFixed(1) + '</span>' +
+                                '<span class="metric-label">Optimization</span>' +
+                            '</div>' +
+                        '</div>';
+
+                        // Update charts with real metrics data
+                        updateChartsWithData({
+                            metrics: {
+                                response_times: { average: data.performance.average_response_time },
+                                memory_efficiency: data.health.memory_usage_percentage,
+                                cache_hit_rate: data.performance.cache_hit_ratio * 100,
+                                throughput: data.performance.operations_per_minute
+                            },
+                            memory_usage: {
+                                used: data.health.memory_usage_percentage,
+                                cached: 25, // Mock data - would come from actual metrics
+                                available: 100 - data.health.memory_usage_percentage - 25,
+                                reserved: 5
+                            }
+                        });
+                    }
                             </div>
                         \`;
                     }

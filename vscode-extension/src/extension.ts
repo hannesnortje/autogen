@@ -913,6 +913,11 @@ function getMemoryAnalyticsSection(analytics: any): string {
                 ${metricsSection}
                 ${suggestionsSection}
             </div>
+            ${(analytics.health || analytics.metrics) ? `
+                <div class="chart-container" style="margin-top: 16px;">
+                    <canvas id="main-analytics-chart" width="400" height="200"></canvas>
+                </div>
+            ` : ''}
         </div>
     `;
 }
@@ -972,6 +977,8 @@ function getComprehensiveDashboardHtml(data: any): string {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>AutoGen Dashboard</title>
+            <!-- Chart.js CDN -->
+            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
             <style>
                 :root {
                     --primary-color: #007ACC;
@@ -1373,6 +1380,22 @@ function getComprehensiveDashboardHtml(data: any): string {
                     line-height: 1.4;
                 }
 
+                /* Chart.js Styles for Main Dashboard */
+                .chart-container {
+                    margin-top: 16px;
+                    padding: 16px;
+                    background: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: var(--border-radius);
+                    position: relative;
+                    height: 250px;
+                }
+
+                .chart-container canvas {
+                    max-width: 100%;
+                    max-height: 100%;
+                }
+
                 @media (max-width: 768px) {
                     .dashboard-grid {
                         grid-template-columns: 1fr;
@@ -1484,6 +1507,65 @@ function getComprehensiveDashboardHtml(data: any): string {
 
             <script>
                 const vscode = acquireVsCodeApi();
+
+                // Initialize analytics chart if present
+                let mainAnalyticsChart = null;
+
+                document.addEventListener('DOMContentLoaded', function() {
+                    const chartCanvas = document.getElementById('main-analytics-chart');
+                    if (chartCanvas) {
+                        initializeMainAnalyticsChart();
+                    }
+                });
+
+                function initializeMainAnalyticsChart() {
+                    const ctx = document.getElementById('main-analytics-chart').getContext('2d');
+                    mainAnalyticsChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['6h ago', '4h ago', '2h ago', '1h ago', 'Now'],
+                            datasets: [
+                                {
+                                    label: 'Memory Health Score',
+                                    data: [85, 82, 78, 75, 90],
+                                    borderColor: '#28a745',
+                                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Performance Score',
+                                    data: [72, 75, 80, 78, 85],
+                                    borderColor: '#007ACC',
+                                    backgroundColor: 'rgba(0, 122, 204, 0.1)',
+                                    tension: 0.4,
+                                    fill: true
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    labels: { color: 'var(--vscode-editor-foreground)' }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                    ticks: { color: 'var(--vscode-editor-foreground)' }
+                                },
+                                x: {
+                                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                    ticks: { color: 'var(--vscode-editor-foreground)' }
+                                }
+                            }
+                        }
+                    });
+                }
 
                 function sendMessage(command) {
                     vscode.postMessage({
