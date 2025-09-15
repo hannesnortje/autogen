@@ -237,6 +237,29 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
   - [x] KnowledgeSeeder, ThreadSummarization, MemoryPruning, KnowledgeTransfer services
   - [x] Enhanced AgentOrchestrator with knowledge management capabilities
 
+### Step 24.5 — VS Code Extension Auto-Start Enhancement ✅ COMPLETED
+- Branch: `feature/25-vscode-auto-start`
+- Scope:
+  - [x] Add automatic server start functionality when clicking offline status
+  - [x] Implement smart status bar interactions with multiple options
+  - [x] Add configurable server command and timeout settings
+  - [x] Create progress notifications with cancellation support
+  - [x] Integrate terminal for server startup with workspace context
+- Acceptance:
+  - [x] Clicking red server status offers to start server automatically
+  - [x] Server starts with proper Poetry environment and workspace directory
+  - [x] Progress notification shows startup stages with cancellation
+  - [x] Configurable timeout and server command options
+  - [x] Extension auto-start capability on activation
+- Tests:
+  - [x] Manual: clicking offline status starts server successfully
+  - [x] Configuration: server command and timeout settings work
+  - [x] Integration: terminal creation and health polling operational
+- Artifacts:
+  - [x] Enhanced VS Code extension with intelligent server management
+  - [x] New commands: autogen.startServer, autogen.serverStatusAction
+  - [x] Updated package.json with server management configuration
+
 ## Phase 5: Advanced Memory Features
 **Goal**: Add sophisticated memory capabilities for enhanced agent performance.
 
@@ -377,6 +400,7 @@ This plan outlines the step-by-step process to integrate the AutoGen MCP server 
 - [x] **Step 22 — Fix Memory Search Implementation ✅ COMPLETED**
 - [x] **Step 23 — Agent Memory Integration ✅ COMPLETED**
 - [x] **Step 24 — Knowledge Seeding and Management ✅ COMPLETED**
+- [x] **Step 24.5 — VS Code Extension Auto-Start Enhancement ✅ COMPLETED**
 - [ ] Step 25 — Artifact Memory Integration
 - [ ] Step 26 — Cross-Project Memory Learning
 - [ ] Step 27 — Memory Analytics and Optimization
