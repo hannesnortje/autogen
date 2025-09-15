@@ -232,8 +232,30 @@ export class McpServerError extends Error {
 
 export class McpClient {
     private currentSessionId: string | null = null;
+    private retryAttempts: number = 3;
+    private retryDelay: number = 1000; // 1 second
+    private requestTimeout: number = 30000; // 30 seconds
+    private requestCache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
 
-    constructor(public readonly serverUrl: string) {}
+    constructor(public readonly serverUrl: string) {
+        // Clear expired cache entries every 5 minutes
+        setInterval(() => this.clearExpiredCache(), 5 * 60 * 1000);
+    }
+
+    private clearExpiredCache(): void {
+        const now = Date.now();
+        for (const [key, entry] of this.requestCache.entries()) {
+            if (now - entry.timestamp > entry.ttl) {
+                this.requestCache.delete(key);
+            }
+        }
+    }
+
+    private getCacheKey(endpoint: string, options: RequestInit): string {
+        const method = options.method || 'GET';
+        const body = options.body || '';
+        return `${method}:${endpoint}:${body}`;
+    }
 
     async isServerAvailable(): Promise<boolean> {
         try {
@@ -254,44 +276,110 @@ export class McpClient {
 
     private async makeRequest<T>(
         endpoint: string,
-        options: RequestInit = {}
+        options: RequestInit = {},
+        retryAttempts?: number,
+        cacheTtl?: number
     ): Promise<T> {
-        try {
-            const url = `${this.serverUrl}${endpoint}`;
-            const response = await fetch(url, {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers,
-                },
-            });
+        const attempts = retryAttempts ?? this.retryAttempts;
+        const cacheKey = this.getCacheKey(endpoint, options);
 
-            if (!response.ok) {
-                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                try {
-                    const errorBody = await response.json();
-                    if (errorBody.detail) {
-                        errorMessage = errorBody.detail;
-                    } else if (errorBody.message) {
-                        errorMessage = errorBody.message;
-                    }
-                } catch (e) {
-                    // Use default error message if JSON parsing fails
-                }
-                throw new McpServerError(errorMessage, response.status);
+        // Check cache for GET requests
+        if ((!options.method || options.method === 'GET') && cacheTtl && this.requestCache.has(cacheKey)) {
+            const cached = this.requestCache.get(cacheKey)!;
+            if (Date.now() - cached.timestamp < cached.ttl) {
+                return cached.data;
             }
-
-            return await response.json();
-        } catch (error) {
-            if (error instanceof McpServerError) {
-                throw error;
-            }
-            // Handle network errors, timeouts, etc.
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            throw new McpServerError(
-                `Failed to connect to MCP server at ${this.serverUrl}: ${message}`
-            );
+            this.requestCache.delete(cacheKey);
         }
+
+        let lastError: Error | null = null;
+
+        for (let attempt = 0; attempt < attempts; attempt++) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), this.requestTimeout);
+
+                const url = `${this.serverUrl}${endpoint}`;
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers,
+                    },
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorBody = await response.json();
+                        if (errorBody.detail) {
+                            errorMessage = errorBody.detail;
+                        } else if (errorBody.message) {
+                            errorMessage = errorBody.message;
+                        }
+                    } catch (e) {
+                        // Use default error message if JSON parsing fails
+                    }
+
+                    // Don't retry for client errors (4xx), only server errors (5xx) and network issues
+                    if (response.status >= 400 && response.status < 500) {
+                        throw new McpServerError(errorMessage, response.status);
+                    }
+
+                    lastError = new McpServerError(errorMessage, response.status);
+
+                    // Wait before retrying (exponential backoff)
+                    if (attempt < attempts - 1) {
+                        await new Promise(resolve => setTimeout(resolve, this.retryDelay * Math.pow(2, attempt)));
+                        continue;
+                    }
+                    throw lastError;
+                }
+
+                const data = await response.json();
+
+                // Cache successful GET requests
+                if ((!options.method || options.method === 'GET') && cacheTtl) {
+                    this.requestCache.set(cacheKey, {
+                        data,
+                        timestamp: Date.now(),
+                        ttl: cacheTtl
+                    });
+                }
+
+                return data;
+            } catch (error) {
+                if (error instanceof McpServerError) {
+                    lastError = error;
+                } else {
+                    // Handle network errors, timeouts, etc.
+                    const message = error instanceof Error ? error.message : 'Unknown error';
+                    lastError = new McpServerError(
+                        `Failed to connect to MCP server at ${this.serverUrl}: ${message}`
+                    );
+                }
+
+                // Don't retry for certain error types
+                if (error instanceof Error &&
+                    (error.name === 'AbortError' ||
+                     error.message.includes('Failed to fetch') ||
+                     error.message.includes('NetworkError'))) {
+
+                    // Wait before retrying network errors (exponential backoff)
+                    if (attempt < attempts - 1) {
+                        await new Promise(resolve => setTimeout(resolve, this.retryDelay * Math.pow(2, attempt)));
+                        continue;
+                    }
+                }
+
+                throw lastError;
+            }
+        }
+
+        throw lastError || new McpServerError('Request failed after all retry attempts');
     }
 
     async startOrchestration(request: OrchestrationRequest): Promise<OrchestrationResponse> {
@@ -351,28 +439,34 @@ export class McpClient {
             throw new McpServerError('No session ID provided');
         }
 
-        return await this.makeRequest<SessionInfo>(`/orchestrate/session/${targetSessionId}`);
+        // Cache session info for 1 minute
+        return await this.makeRequest<SessionInfo>(`/orchestrate/session/${targetSessionId}`, {}, undefined, 60 * 1000);
     }
 
     async listSessions(): Promise<SessionInfo[]> {
-        const resp = await this.makeRequest<SessionsResponse>('/orchestrate/sessions');
+        // Cache session list for 30 seconds
+        const resp = await this.makeRequest<SessionsResponse>('/orchestrate/sessions', {}, undefined, 30 * 1000);
         return resp.sessions || [];
     }
 
     async getHealth(): Promise<{ status: string }> {
-        return await this.makeRequest<{ status: string }>('/health');
+        // Cache health status for 15 seconds
+        return await this.makeRequest<{ status: string }>('/health', {}, undefined, 15 * 1000);
     }
 
     // Memory Analytics Methods
     async getMemoryAnalyticsReport(): Promise<MemoryAnalyticsReport> {
-        return await this.makeRequest<MemoryAnalyticsReport>('/memory/analytics/report');
+        // Cache for 2 minutes since analytics data changes relatively slowly
+        return await this.makeRequest<MemoryAnalyticsReport>('/memory/analytics/report', {}, undefined, 2 * 60 * 1000);
     }
 
     async getMemoryHealth(): Promise<MemoryHealthStatus> {
-        return await this.makeRequest<MemoryHealthStatus>('/memory/analytics/health');
+        // Cache for 30 seconds for health status
+        return await this.makeRequest<MemoryHealthStatus>('/memory/analytics/health', {}, undefined, 30 * 1000);
     }
 
     async optimizeMemory(request: MemoryOptimizationRequest): Promise<MemoryOptimizationResult> {
+        // No caching for optimization requests (POST operations)
         return await this.makeRequest<MemoryOptimizationResult>('/memory/analytics/optimize', {
             method: 'POST',
             body: JSON.stringify(request)
@@ -380,7 +474,8 @@ export class McpClient {
     }
 
     async getMemoryMetrics(): Promise<MemoryMetrics> {
-        return await this.makeRequest<MemoryMetrics>('/memory/analytics/metrics');
+        // Cache for 1 minute since metrics update frequently
+        return await this.makeRequest<MemoryMetrics>('/memory/analytics/metrics', {}, undefined, 60 * 1000);
     }
 
     // Cross-Project Learning Methods
@@ -399,6 +494,22 @@ export class McpClient {
     }
 
     async getCrossProjectAnalysis(): Promise<CrossProjectAnalysis> {
-        return await this.makeRequest<CrossProjectAnalysis>('/cross-project/analysis');
+        // Cache cross-project analysis for 5 minutes since it's computationally expensive
+        return await this.makeRequest<CrossProjectAnalysis>('/cross-project/analysis', {}, undefined, 5 * 60 * 1000);
+    }
+
+    // Helper methods for caching and retry logic
+    private cleanupCache(): void {
+        const now = Date.now();
+        for (const [key, cached] of this.requestCache.entries()) {
+            if (now - cached.timestamp >= cached.ttl) {
+                this.requestCache.delete(key);
+            }
+        }
+    }
+
+    // Public method to manually clear cache if needed
+    public clearCache(): void {
+        this.requestCache.clear();
     }
 }

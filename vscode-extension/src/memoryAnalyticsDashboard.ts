@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { McpClient, MemoryAnalyticsReport, MemoryHealthStatus, MemoryOptimizationRequest, MemoryMetrics } from './mcpClient';
+import { RealtimeDataManager, RealtimeDataUpdate } from './realtimeDataService';
 
 export interface IMemoryAnalyticsDashboard {
     readonly panel: vscode.WebviewPanel;
@@ -54,6 +55,11 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
     private analyticsData: MemoryAnalyticsReport | null = null;
     private healthData: MemoryHealthStatus | null = null;
     private metricsData: MemoryMetrics | null = null;
+    private isOfflineMode: boolean = false;
+    private lastDataRefresh: Date | null = null;
+    private retryAttempts: number = 0;
+    private maxRetries: number = 3;
+    private realtimeDataManager: RealtimeDataManager;
 
     constructor(
         panel: vscode.WebviewPanel,
@@ -61,6 +67,15 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
         private readonly mcpClient: McpClient
     ) {
         this.panel = panel;
+
+        // Initialize real-time data manager
+        const outputChannel = vscode.window.createOutputChannel('AutoGen Real-time Data');
+        this.realtimeDataManager = new RealtimeDataManager(outputChannel, {
+            url: vscode.workspace.getConfiguration('autogen').get('websocketUrl', 'ws://localhost:9001/ws')
+        });
+
+        // Setup real-time data handlers
+        this.setupRealtimeDataHandlers();
 
         // Set the webview's initial html content
         this.update();
@@ -98,6 +113,23 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                     case 'refreshAll':
                         await this.refreshAllData();
                         break;
+                    case 'retryConnection':
+                        await this.retryConnection();
+                        break;
+                    case 'clearCache':
+                        this.clearCachedData();
+                        break;
+                    case 'forceRefresh':
+                        this.isOfflineMode = false;
+                        this.retryAttempts = 0;
+                        await this.refreshAllData();
+                        break;
+                    case 'enableRealtime':
+                        this.enableRealtimeUpdates();
+                        break;
+                    case 'disableRealtime':
+                        this.disableRealtimeUpdates();
+                        break;
                 }
             },
             null,
@@ -107,6 +139,9 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
 
     public dispose(): void {
         MemoryAnalyticsDashboardProvider.currentPanel = undefined;
+
+        // Dispose real-time data manager
+        this.realtimeDataManager.dispose();
 
         // Clean up our resources
         this.panel.dispose();
@@ -119,6 +154,61 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
         }
     }
 
+    private setupRealtimeDataHandlers(): void {
+        // Handle real-time data updates
+        this.realtimeDataManager.onDataUpdate((update: RealtimeDataUpdate) => {
+            this.handleRealtimeUpdate(update);
+        });
+
+        // Handle connection status changes
+        this.realtimeDataManager.onConnectionStatusChange((status: 'connected' | 'disconnected' | 'error') => {
+            this.panel.webview.postMessage({
+                type: 'realtimeConnectionStatus',
+                status: status,
+                timestamp: new Date().toISOString()
+            });
+        });
+    }
+
+    private handleRealtimeUpdate(update: RealtimeDataUpdate): void {
+        // Send real-time update to webview
+        this.panel.webview.postMessage({
+            type: 'realtimeUpdate',
+            updateType: update.type,
+            data: update.data,
+            timestamp: update.timestamp
+        });
+
+        // Update cached data
+        switch (update.type) {
+            case 'memory_metrics':
+                this.metricsData = update.data;
+                break;
+            case 'health_status':
+                this.healthData = update.data;
+                break;
+            case 'analytics_report':
+                this.analyticsData = update.data;
+                break;
+        }
+    }
+
+    private enableRealtimeUpdates(): void {
+        this.realtimeDataManager.start();
+        this.panel.webview.postMessage({
+            type: 'realtimeEnabled',
+            message: 'Real-time updates enabled'
+        });
+    }
+
+    private disableRealtimeUpdates(): void {
+        this.realtimeDataManager.stop();
+        this.panel.webview.postMessage({
+            type: 'realtimeDisabled',
+            message: 'Real-time updates disabled'
+        });
+    }
+
     private async update(): Promise<void> {
         const webview = this.panel.webview;
         this.panel.title = 'Memory Analytics Dashboard';
@@ -129,86 +219,250 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
     }
 
     private async refreshAllData(): Promise<void> {
-        await Promise.all([
-            this.loadAnalyticsData(),
-            this.loadHealthData(),
-            this.loadMetricsData()
-        ]);
+        try {
+            // Check if server is available
+            const isConnected = await this.mcpClient.isServerAvailable();
+
+            if (!isConnected) {
+                this.enterOfflineMode();
+                return;
+            }
+
+            // If we were in offline mode and now connected, exit offline mode
+            if (this.isOfflineMode) {
+                this.exitOfflineMode();
+            }
+
+            this.retryAttempts = 0; // Reset retry counter on successful connection
+
+            // Load all data concurrently with error handling for each
+            const results = await Promise.allSettled([
+                this.loadAnalyticsData(),
+                this.loadHealthData(),
+                this.loadMetricsData()
+            ]);
+
+            // Check if any requests failed
+            const failedRequests = results.filter(result => result.status === 'rejected').length;
+            if (failedRequests > 0) {
+                this.panel.webview.postMessage({
+                    type: 'partialFailure',
+                    message: `${failedRequests} out of 3 data sources failed to load. Some information may be outdated.`
+                });
+            }
+
+            this.lastDataRefresh = new Date();
+            this.panel.webview.postMessage({
+                type: 'dataRefreshComplete',
+                timestamp: this.lastDataRefresh.toISOString()
+            });
+
+        } catch (error) {
+            this.handleConnectionError(error);
+        }
+    }
+
+    private enterOfflineMode(): void {
+        this.isOfflineMode = true;
+        this.panel.webview.postMessage({
+            type: 'offlineMode',
+            message: 'Connection to MCP server lost. Working in offline mode with cached data.',
+            lastRefresh: this.lastDataRefresh?.toISOString() || null
+        });
+    }
+
+    private exitOfflineMode(): void {
+        this.isOfflineMode = false;
+        this.panel.webview.postMessage({
+            type: 'onlineMode',
+            message: 'Connection to MCP server restored. Live data is now available.'
+        });
+    }
+
+    private handleConnectionError(error: any): void {
+        this.retryAttempts++;
+
+        if (this.retryAttempts >= this.maxRetries) {
+            this.enterOfflineMode();
+        } else {
+            this.panel.webview.postMessage({
+                type: 'connectionError',
+                message: `Connection error (attempt ${this.retryAttempts}/${this.maxRetries}). Retrying...`,
+                error: error instanceof Error ? error.message : 'Unknown connection error'
+            });
+
+            // Retry after a delay
+            setTimeout(() => {
+                this.refreshAllData();
+            }, 2000 * this.retryAttempts); // Exponential backoff
+        }
     }
 
     private async loadAnalyticsData(): Promise<void> {
         try {
-            const isConnected = await this.mcpClient.isServerAvailable();
-            if (!isConnected) {
+            // In offline mode, only use cached data
+            if (this.isOfflineMode && this.analyticsData) {
                 this.panel.webview.postMessage({
-                    type: 'analyticsError',
-                    error: 'MCP server is not available'
+                    type: 'analyticsData',
+                    data: this.analyticsData,
+                    cached: true
                 });
                 return;
+            }
+
+            const isConnected = await this.mcpClient.isServerAvailable();
+            if (!isConnected) {
+                throw new Error('MCP server is not available');
             }
 
             this.analyticsData = await this.mcpClient.getMemoryAnalyticsReport();
             this.panel.webview.postMessage({
                 type: 'analyticsData',
-                data: this.analyticsData
+                data: this.analyticsData,
+                cached: false
             });
 
         } catch (error) {
+            // If we have cached data, use it with a warning
+            if (this.analyticsData) {
+                this.panel.webview.postMessage({
+                    type: 'analyticsData',
+                    data: this.analyticsData,
+                    cached: true,
+                    warning: 'Using cached data due to connection issues'
+                });
+            }
+
             this.panel.webview.postMessage({
                 type: 'analyticsError',
-                error: error instanceof Error ? error.message : 'Failed to load analytics data'
+                error: this.getErrorMessage(error),
+                severity: this.getErrorSeverity(error),
+                hasCache: !!this.analyticsData
             });
         }
     }
 
     private async loadHealthData(): Promise<void> {
         try {
-            const isConnected = await this.mcpClient.isServerAvailable();
-            if (!isConnected) {
+            // In offline mode, only use cached data
+            if (this.isOfflineMode && this.healthData) {
                 this.panel.webview.postMessage({
-                    type: 'healthError',
-                    error: 'MCP server is not available'
+                    type: 'healthData',
+                    data: this.healthData,
+                    cached: true
                 });
                 return;
+            }
+
+            const isConnected = await this.mcpClient.isServerAvailable();
+            if (!isConnected) {
+                throw new Error('MCP server is not available');
             }
 
             this.healthData = await this.mcpClient.getMemoryHealth();
             this.panel.webview.postMessage({
                 type: 'healthData',
-                data: this.healthData
+                data: this.healthData,
+                cached: false
             });
 
         } catch (error) {
+            // If we have cached data, use it with a warning
+            if (this.healthData) {
+                this.panel.webview.postMessage({
+                    type: 'healthData',
+                    data: this.healthData,
+                    cached: true,
+                    warning: 'Using cached data due to connection issues'
+                });
+            }
+
             this.panel.webview.postMessage({
                 type: 'healthError',
-                error: error instanceof Error ? error.message : 'Failed to load health data'
+                error: this.getErrorMessage(error),
+                severity: this.getErrorSeverity(error),
+                hasCache: !!this.healthData
             });
         }
     }
 
     private async loadMetricsData(): Promise<void> {
         try {
-            const isConnected = await this.mcpClient.isServerAvailable();
-            if (!isConnected) {
+            // In offline mode, only use cached data
+            if (this.isOfflineMode && this.metricsData) {
                 this.panel.webview.postMessage({
-                    type: 'metricsError',
-                    error: 'MCP server is not available'
+                    type: 'metricsData',
+                    data: this.metricsData,
+                    cached: true
                 });
                 return;
+            }
+
+            const isConnected = await this.mcpClient.isServerAvailable();
+            if (!isConnected) {
+                throw new Error('MCP server is not available');
             }
 
             this.metricsData = await this.mcpClient.getMemoryMetrics();
             this.panel.webview.postMessage({
                 type: 'metricsData',
-                data: this.metricsData
+                data: this.metricsData,
+                cached: false
             });
 
         } catch (error) {
+            // If we have cached data, use it with a warning
+            if (this.metricsData) {
+                this.panel.webview.postMessage({
+                    type: 'metricsData',
+                    data: this.metricsData,
+                    cached: true,
+                    warning: 'Using cached data due to connection issues'
+                });
+            }
+
             this.panel.webview.postMessage({
                 type: 'metricsError',
-                error: error instanceof Error ? error.message : 'Failed to load metrics data'
+                error: this.getErrorMessage(error),
+                severity: this.getErrorSeverity(error),
+                hasCache: !!this.metricsData
             });
         }
+    }
+
+    private getErrorMessage(error: any): string {
+        if (error instanceof Error) {
+            // Provide user-friendly messages for common errors
+            if (error.message.includes('ECONNREFUSED')) {
+                return 'Cannot connect to MCP server. Please check if the server is running.';
+            }
+            if (error.message.includes('timeout')) {
+                return 'Request timed out. The server may be overloaded.';
+            }
+            if (error.message.includes('404')) {
+                return 'Endpoint not found. The server may not support this feature.';
+            }
+            if (error.message.includes('500')) {
+                return 'Server error occurred. Please try again later.';
+            }
+            return error.message;
+        }
+        return 'An unknown error occurred';
+    }
+
+    private getErrorSeverity(error: any): 'low' | 'medium' | 'high' {
+        if (error instanceof Error) {
+            if (error.message.includes('ECONNREFUSED') || error.message.includes('not available')) {
+                return 'high'; // Complete connection failure
+            }
+            if (error.message.includes('timeout') || error.message.includes('500')) {
+                return 'medium'; // Temporary server issues
+            }
+            if (error.message.includes('404') || error.message.includes('400')) {
+                return 'low'; // Client-side or configuration issues
+            }
+        }
+        return 'medium';
     }
 
     private async handleOptimizeMemory(strategy: string, scope?: string, dryRun?: boolean): Promise<void> {
@@ -236,6 +490,46 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                 error: error instanceof Error ? error.message : 'Failed to optimize memory'
             });
         }
+    }
+
+    private async retryConnection(): Promise<void> {
+        this.panel.webview.postMessage({
+            type: 'retryAttempt',
+            message: 'Attempting to reconnect...'
+        });
+
+        this.retryAttempts = 0; // Reset retry counter
+        this.isOfflineMode = false; // Exit offline mode
+
+        try {
+            await this.refreshAllData();
+            this.panel.webview.postMessage({
+                type: 'connectionRestored',
+                message: 'Connection restored successfully!'
+            });
+        } catch (error) {
+            this.panel.webview.postMessage({
+                type: 'retryFailed',
+                message: 'Retry failed. Still in offline mode.',
+                error: this.getErrorMessage(error)
+            });
+            this.enterOfflineMode();
+        }
+    }
+
+    private clearCachedData(): void {
+        this.analyticsData = null;
+        this.healthData = null;
+        this.metricsData = null;
+        this.lastDataRefresh = null;
+
+        this.panel.webview.postMessage({
+            type: 'cacheCleared',
+            message: 'Cached data cleared. Fresh data will be loaded on next refresh.'
+        });
+
+        // Clear MCP client cache as well
+        this.mcpClient.clearCache();
     }
 
     private async getHtmlForWebview(webview: vscode.Webview): Promise<string> {
@@ -526,16 +820,174 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                             height: 200px;
                         }
                     }
+
+                    /* Error Handling and Status Styles */
+                    .status-bar {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        z-index: 1000;
+                        padding: 8px 16px;
+                        font-size: 0.9em;
+                        display: none;
+                        animation: slideDown 0.3s ease-out;
+                    }
+
+                    .status-bar.online {
+                        background: var(--success-color);
+                        color: white;
+                    }
+
+                    .status-bar.offline {
+                        background: var(--warning-color);
+                        color: black;
+                    }
+
+                    .status-bar.error {
+                        background: var(--danger-color);
+                        color: white;
+                    }
+
+                    .status-bar.info {
+                        background: var(--info-color);
+                        color: white;
+                    }
+
+                    @keyframes slideDown {
+                        from { transform: translateY(-100%); }
+                        to { transform: translateY(0); }
+                    }
+
+                    .error-container {
+                        background: rgba(220, 53, 69, 0.1);
+                        border: 1px solid var(--danger-color);
+                        border-radius: var(--border-radius);
+                        padding: 16px;
+                        margin: 16px 0;
+                    }
+
+                    .error-message {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        margin-bottom: 12px;
+                    }
+
+                    .error-icon {
+                        font-size: 1.2em;
+                        color: var(--danger-color);
+                    }
+
+                    .error-actions {
+                        display: flex;
+                        gap: 8px;
+                        flex-wrap: wrap;
+                    }
+
+                    .cached-data-warning {
+                        background: rgba(255, 193, 7, 0.1);
+                        border: 1px solid var(--warning-color);
+                        border-radius: var(--border-radius);
+                        padding: 12px;
+                        margin: 12px 0;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        font-size: 0.9em;
+                    }
+
+                    .cached-icon {
+                        color: var(--warning-color);
+                    }
+
+                    .connection-status {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        font-size: 0.9em;
+                        padding: 4px 8px;
+                        border-radius: 12px;
+                        margin-left: auto;
+                    }
+
+                    .connection-status.connected {
+                        background: rgba(40, 167, 69, 0.1);
+                        color: var(--success-color);
+                    }
+
+                    .connection-status.disconnected {
+                        background: rgba(220, 53, 69, 0.1);
+                        color: var(--danger-color);
+                    }
+
+                    .connection-status.reconnecting {
+                        background: rgba(255, 193, 7, 0.1);
+                        color: var(--warning-color);
+                    }
+
+                    .pulse {
+                        animation: pulse 1.5s ease-in-out infinite;
+                    }
+
+                    @keyframes pulse {
+                        0% { opacity: 1; }
+                        50% { opacity: 0.5; }
+                        100% { opacity: 1; }
+                    }
+
+                    .retry-button {
+                        background: var(--primary-color);
+                        color: white;
+                        border: none;
+                        padding: 8px 12px;
+                        border-radius: var(--border-radius);
+                        cursor: pointer;
+                        font-size: 0.8em;
+                        transition: background-color var(--animation-duration);
+                    }
+
+                    .retry-button:hover {
+                        background: #005a9c;
+                    }
+
+                    .clear-cache-button {
+                        background: var(--warning-color);
+                        color: black;
+                        border: none;
+                        padding: 8px 12px;
+                        border-radius: var(--border-radius);
+                        cursor: pointer;
+                        font-size: 0.8em;
+                        transition: background-color var(--animation-duration);
+                    }
+
+                    .clear-cache-button:hover {
+                        background: #e0a800;
+                    }
                 </style>
             </head>
             <body>
+                <!-- Status Bar for notifications -->
+                <div id="status-bar" class="status-bar"></div>
+
                 <div class="dashboard-header">
                     <h1 class="dashboard-title">🧠 Memory Analytics Dashboard</h1>
                     <div class="header-actions">
+                        <div id="connection-status" class="connection-status connected">
+                            <span id="connection-icon">🟢</span>
+                            <span id="connection-text">Connected</span>
+                        </div>
+                        <div id="realtime-status" class="connection-status disconnected">
+                            <span id="realtime-icon">🔴</span>
+                            <span id="realtime-text">Real-time Off</span>
+                        </div>
+                        <button onclick="toggleRealtime()" id="realtime-toggle" class="action-button">🔄 Enable Real-time</button>
                         <button onclick="refreshAll()" class="action-button">🔄 Refresh All</button>
                         <button onclick="loadAnalytics()" class="action-button">📊 Analytics</button>
                         <button onclick="loadHealth()" class="action-button">🏥 Health</button>
                         <button onclick="loadMetrics()" class="action-button">📈 Metrics</button>
+                        <button onclick="forceRefresh()" class="action-button primary">⚡ Force Refresh</button>
                     </div>
                 </div>
 
@@ -848,31 +1300,80 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                         switch (message.type) {
                             case 'analyticsData':
                                 displayAnalyticsData(message.data);
+                                if (message.cached) {
+                                    showCachedDataWarning('analytics-section', message.warning);
+                                }
                                 break;
                             case 'analyticsError':
-                                document.getElementById('analytics-content').innerHTML =
-                                    '<div class="error">❌ ' + message.error + '</div>';
+                                showError('analytics-section', message.error, message.severity, message.hasCache);
                                 break;
                             case 'healthData':
                                 displayHealthData(message.data);
+                                if (message.cached) {
+                                    showCachedDataWarning('health-section', message.warning);
+                                }
                                 break;
                             case 'healthError':
-                                document.getElementById('health-content').innerHTML =
-                                    '<div class="error">❌ ' + message.error + '</div>';
+                                showError('health-section', message.error, message.severity, message.hasCache);
                                 break;
                             case 'metricsData':
                                 displayMetricsData(message.data);
+                                if (message.cached) {
+                                    showCachedDataWarning('metrics-section', message.warning);
+                                }
                                 break;
                             case 'metricsError':
-                                document.getElementById('metrics-content').innerHTML =
-                                    '<div class="error">❌ ' + message.error + '</div>';
+                                showError('metrics-section', message.error, message.severity, message.hasCache);
                                 break;
                             case 'optimizationResult':
                                 displayOptimizationResult(message.data);
                                 break;
                             case 'optimizationError':
-                                document.getElementById('optimization-results').innerHTML =
-                                    '<div class="error">❌ ' + message.error + '</div>';
+                                showError('optimization-section', message.error, message.severity, false);
+                                break;
+                            case 'offlineMode':
+                                enterOfflineMode(message.message, message.lastRefresh);
+                                break;
+                            case 'onlineMode':
+                                exitOfflineMode(message.message);
+                                break;
+                            case 'connectionError':
+                                showStatusMessage(message.message, 'error', 5000);
+                                break;
+                            case 'partialFailure':
+                                showStatusMessage(message.message, 'info', 8000);
+                                break;
+                            case 'dataRefreshComplete':
+                                updateLastRefreshTime(message.timestamp);
+                                break;
+                            case 'retryAttempt':
+                                showStatusMessage(message.message, 'info');
+                                updateConnectionStatus('reconnecting');
+                                break;
+                            case 'connectionRestored':
+                                showStatusMessage(message.message, 'online', 3000);
+                                updateConnectionStatus('connected');
+                                break;
+                            case 'retryFailed':
+                                showStatusMessage(message.message, 'error', 8000);
+                                updateConnectionStatus('disconnected');
+                                break;
+                            case 'cacheCleared':
+                                showStatusMessage(message.message, 'info', 3000);
+                                break;
+                            case 'realtimeUpdate':
+                                handleRealtimeUpdate(message.updateType, message.data, message.timestamp);
+                                break;
+                            case 'realtimeConnectionStatus':
+                                updateRealtimeStatus(message.status);
+                                break;
+                            case 'realtimeEnabled':
+                                showStatusMessage(message.message, 'online', 3000);
+                                updateRealtimeToggle(true);
+                                break;
+                            case 'realtimeDisabled':
+                                showStatusMessage(message.message, 'info', 3000);
+                                updateRealtimeToggle(false);
                                 break;
                         }
                     });
@@ -1096,6 +1597,252 @@ class MemoryAnalyticsDashboard implements IMemoryAnalyticsDashboard {
                     document.addEventListener('DOMContentLoaded', function() {
                         refreshAll();
                     });
+
+                    // Enhanced Error Handling Functions
+                    function showError(sectionId, errorMessage, severity = 'medium', hasCache = false) {
+                        const section = document.getElementById(sectionId);
+                        const contentDiv = section.querySelector('div[id$="-content"]') || section.querySelector('.loading');
+
+                        const severityIcon = {
+                            'low': '⚠️',
+                            'medium': '❌',
+                            'high': '🚨'
+                        };
+
+                        const errorHtml = \`
+                            <div class="error-container">
+                                <div class="error-message">
+                                    <span class="error-icon">\${severityIcon[severity] || '❌'}</span>
+                                    <span>\${errorMessage}</span>
+                                </div>
+                                <div class="error-actions">
+                                    <button onclick="retryLoad('\${sectionId}')" class="retry-button">🔄 Retry</button>
+                                    \${hasCache ? '<button onclick="clearCache()" class="clear-cache-button">🗑️ Clear Cache</button>' : ''}
+                                    <button onclick="forceRefresh()" class="retry-button">⚡ Force Refresh</button>
+                                </div>
+                            </div>
+                        \`;
+
+                        if (contentDiv) {
+                            contentDiv.innerHTML = errorHtml;
+                        }
+                    }
+
+                    function showCachedDataWarning(sectionId, warningMessage) {
+                        const section = document.getElementById(sectionId);
+                        let warningDiv = section.querySelector('.cached-data-warning');
+
+                        if (!warningDiv) {
+                            warningDiv = document.createElement('div');
+                            warningDiv.className = 'cached-data-warning';
+                            section.appendChild(warningDiv);
+                        }
+
+                        warningDiv.innerHTML = \`
+                            <span class="cached-icon">📦</span>
+                            <span>\${warningMessage || 'Showing cached data'}</span>
+                        \`;
+                    }
+
+                    function showStatusMessage(message, type = 'info', duration = 0) {
+                        const statusBar = document.getElementById('status-bar');
+                        statusBar.className = 'status-bar ' + type;
+                        statusBar.textContent = message;
+                        statusBar.style.display = 'block';
+
+                        if (duration > 0) {
+                            setTimeout(() => {
+                                statusBar.style.display = 'none';
+                            }, duration);
+                        }
+                    }
+
+                    function updateConnectionStatus(status) {
+                        const connectionStatus = document.getElementById('connection-status');
+                        const connectionIcon = document.getElementById('connection-icon');
+                        const connectionText = document.getElementById('connection-text');
+
+                        if (connectionStatus && connectionIcon && connectionText) {
+                            connectionStatus.className = 'connection-status ' + status;
+
+                            switch (status) {
+                                case 'connected':
+                                    connectionIcon.textContent = '🟢';
+                                    connectionText.textContent = 'Connected';
+                                    connectionStatus.classList.remove('pulse');
+                                    break;
+                                case 'disconnected':
+                                    connectionIcon.textContent = '🔴';
+                                    connectionText.textContent = 'Offline';
+                                    connectionStatus.classList.remove('pulse');
+                                    break;
+                                case 'reconnecting':
+                                    connectionIcon.textContent = '🟡';
+                                    connectionText.textContent = 'Reconnecting...';
+                                    connectionStatus.classList.add('pulse');
+                                    break;
+                            }
+                        }
+                    }
+
+                    function enterOfflineMode(message, lastRefresh) {
+                        updateConnectionStatus('disconnected');
+                        showStatusMessage(message, 'offline');
+
+                        if (lastRefresh) {
+                            const refreshTime = new Date(lastRefresh).toLocaleTimeString();
+                            showStatusMessage(\`\${message} Last refresh: \${refreshTime}\`, 'offline');
+                        }
+                    }
+
+                    function exitOfflineMode(message) {
+                        updateConnectionStatus('connected');
+                        showStatusMessage(message, 'online', 3000);
+
+                        // Remove cached data warnings
+                        document.querySelectorAll('.cached-data-warning').forEach(warning => {
+                            warning.remove();
+                        });
+                    }
+
+                    function updateLastRefreshTime(timestamp) {
+                        const refreshTime = new Date(timestamp).toLocaleTimeString();
+                        // Could add a "Last updated" indicator in the UI if desired
+                    }
+
+                    function retryLoad(sectionId) {
+                        const actionMap = {
+                            'analytics-section': loadAnalytics,
+                            'health-section': loadHealth,
+                            'metrics-section': loadMetrics
+                        };
+
+                        const action = actionMap[sectionId];
+                        if (action) {
+                            action();
+                        }
+                    }
+
+                    function retryConnection() {
+                        vscode.postMessage({ type: 'retryConnection' });
+                    }
+
+                    function clearCache() {
+                        vscode.postMessage({ type: 'clearCache' });
+                    }
+
+                    function forceRefresh() {
+                        vscode.postMessage({ type: 'forceRefresh' });
+                    }
+
+                    // Real-time functionality
+                    let realtimeEnabled = false;
+
+                    function toggleRealtime() {
+                        if (realtimeEnabled) {
+                            vscode.postMessage({ type: 'disableRealtime' });
+                        } else {
+                            vscode.postMessage({ type: 'enableRealtime' });
+                        }
+                    }
+
+                    function updateRealtimeToggle(enabled) {
+                        realtimeEnabled = enabled;
+                        const button = document.getElementById('realtime-toggle');
+                        if (button) {
+                            button.textContent = enabled ? '⏸️ Disable Real-time' : '▶️ Enable Real-time';
+                            button.className = enabled ? 'action-button primary' : 'action-button';
+                        }
+                    }
+
+                    function updateRealtimeStatus(status) {
+                        const realtimeStatus = document.getElementById('realtime-status');
+                        const realtimeIcon = document.getElementById('realtime-icon');
+                        const realtimeText = document.getElementById('realtime-text');
+
+                        if (realtimeStatus && realtimeIcon && realtimeText) {
+                            realtimeStatus.className = 'connection-status ' + status;
+
+                            switch (status) {
+                                case 'connected':
+                                    realtimeIcon.textContent = '🟢';
+                                    realtimeText.textContent = 'Real-time On';
+                                    realtimeStatus.classList.remove('pulse');
+                                    break;
+                                case 'disconnected':
+                                    realtimeIcon.textContent = '🔴';
+                                    realtimeText.textContent = 'Real-time Off';
+                                    realtimeStatus.classList.remove('pulse');
+                                    break;
+                                case 'error':
+                                    realtimeIcon.textContent = '⚠️';
+                                    realtimeText.textContent = 'Real-time Error';
+                                    realtimeStatus.classList.remove('pulse');
+                                    break;
+                            }
+                        }
+                    }
+
+                    function handleRealtimeUpdate(updateType, data, timestamp) {
+                        // Show real-time indicator
+                        showStatusMessage(\`Real-time update: \${updateType}\`, 'info', 2000);
+
+                        // Update the appropriate section with new data
+                        switch (updateType) {
+                            case 'memory_metrics':
+                                displayMetricsData(data);
+                                addRealtimeIndicator('metrics-section');
+                                break;
+                            case 'health_status':
+                                displayHealthData(data);
+                                addRealtimeIndicator('health-section');
+                                break;
+                            case 'analytics_report':
+                                displayAnalyticsData(data);
+                                addRealtimeIndicator('analytics-section');
+                                break;
+                            case 'optimization_complete':
+                                showStatusMessage('Memory optimization completed', 'online', 5000);
+                                // Refresh all data to show optimization results
+                                refreshAll();
+                                break;
+                        }
+                    }
+
+                    function addRealtimeIndicator(sectionId) {
+                        const section = document.getElementById(sectionId);
+                        if (section) {
+                            // Remove existing indicator
+                            const existingIndicator = section.querySelector('.realtime-indicator');
+                            if (existingIndicator) {
+                                existingIndicator.remove();
+                            }
+
+                            // Add new indicator
+                            const indicator = document.createElement('div');
+                            indicator.className = 'realtime-indicator';
+                            indicator.innerHTML = '🔴 Live';
+                            indicator.style.cssText = \`
+                                position: absolute;
+                                top: 8px;
+                                right: 8px;
+                                background: var(--danger-color);
+                                color: white;
+                                padding: 2px 6px;
+                                border-radius: 10px;
+                                font-size: 0.7em;
+                                animation: pulse 1s ease-in-out infinite;
+                            \`;
+
+                            section.style.position = 'relative';
+                            section.appendChild(indicator);
+
+                            // Remove indicator after 3 seconds
+                            setTimeout(() => {
+                                indicator.remove();
+                            }, 3000);
+                        }
+                    }
                 </script>
             </body>
             </html>
