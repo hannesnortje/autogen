@@ -1,14 +1,8 @@
 """
 Test script for Artifact Memory Integration Service
 
-This script demonstrates the artifact memory functionality b    print("\n📊 Review patterns:")
-    print(f"   Total reviews: {patterns['patterns']['total_reviews']}")
-    print(
-        f"   Most common category: {patterns['patterns']['most_common_category']}"
-    )
-    print(
-        f"   Severity distribution: {patterns['patterns']['severity_distribution']}"
-    ). Capturing current Git commit information
+This script demonstrates the artifact memory functionality by:
+1. Capturing current Git commit information
 2. Simulating build results
 3. Adding code review feedback
 4. Linking all artifacts to memory
@@ -21,12 +15,12 @@ import asyncio
 import sys
 from pathlib import Path
 
+from src.autogen_mcp.artifact_memory import ArtifactMemoryService
+from src.autogen_mcp.multi_memory import MultiScopeMemoryService
+
 # Add the project root to Python path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
-
-from src.autogen_mcp.artifact_memory import ArtifactMemoryService
-from src.autogen_mcp.multi_memory import MultiScopeMemoryService
 
 
 async def test_artifact_memory():

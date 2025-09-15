@@ -16,6 +16,8 @@ from autogen_mcp.hybrid_search_service import HybridSearchService, HybridConfig
 from autogen_mcp.orchestrator import AgentOrchestrator
 from autogen_mcp.gemini_client import GeminiClient
 from autogen_mcp.observability import get_logger
+from autogen_mcp.artifact_memory import ArtifactMemoryService
+from autogen_mcp.cross_project_learning import CrossProjectLearningService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,6 +28,10 @@ collection_manager = CollectionManager()
 memory_service = MultiScopeMemoryService(collection_manager)
 knowledge_seeder = KnowledgeSeeder(collection_manager)
 hybrid_search = HybridSearchService(HybridConfig())
+
+# Initialize artifact memory and cross-project learning services
+artifact_service = ArtifactMemoryService(memory_service)
+cross_project_service = CrossProjectLearningService(memory_service, artifact_service)
 
 # Initialize Gemini client only if API key is available
 try:
@@ -502,6 +508,144 @@ async def list_files():
     except Exception as e:
         logger.error("Failed to list files", extra={"extra": {"error": str(e)}})
         raise HTTPException(status_code=500, detail=f"File listing failed: {str(e)}")
+
+
+# --- Cross-Project Learning Endpoints ---
+
+
+class RegisterProjectRequest(BaseModel):
+    project_id: str
+    name: str
+    description: str
+    tech_stack: list[str]
+    domain: str
+
+
+class ProjectRecommendationsRequest(BaseModel):
+    project_id: str
+
+
+@app.post("/cross-project/register")
+async def register_project(req: RegisterProjectRequest):
+    """Register a project for cross-project learning"""
+    try:
+        logger.info(
+            "Registering project for cross-project learning",
+            extra={
+                "extra": {
+                    "project_id": req.project_id,
+                    "name": req.name,
+                    "domain": req.domain,
+                    "tech_stack": req.tech_stack,
+                }
+            },
+        )
+
+        project_profile = cross_project_service.register_project(
+            project_id=req.project_id,
+            name=req.name,
+            description=req.description,
+            tech_stack=req.tech_stack,
+            domain=req.domain,
+        )
+
+        logger.info(
+            "Project registered successfully",
+            extra={"extra": {"project_id": req.project_id}},
+        )
+
+        return {
+            "project_id": project_profile.project_id,
+            "name": project_profile.name,
+            "domain": project_profile.domain,
+            "patterns_detected": project_profile.patterns_used,
+            "success_metrics": project_profile.success_metrics,
+            "status": "registered",
+        }
+
+    except Exception as e:
+        logger.error(
+            "Failed to register project",
+            extra={"extra": {"error": str(e), "project_id": req.project_id}},
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Project registration failed: {str(e)}"
+        )
+
+
+@app.post("/cross-project/recommendations")
+async def get_project_recommendations(req: ProjectRecommendationsRequest):
+    """Get cross-project learning recommendations for a project"""
+    try:
+        logger.info(
+            "Getting cross-project recommendations",
+            extra={"extra": {"project_id": req.project_id}},
+        )
+
+        recommendations = cross_project_service.get_project_recommendations(
+            req.project_id
+        )
+
+        logger.info(
+            "Generated cross-project recommendations",
+            extra={
+                "extra": {
+                    "project_id": req.project_id,
+                    "similar_projects_count": len(
+                        recommendations.get("similar_projects", [])
+                    ),
+                    "solutions_count": len(
+                        recommendations.get("recommended_solutions", [])
+                    ),
+                    "practices_count": len(
+                        recommendations.get("recommended_practices", [])
+                    ),
+                }
+            },
+        )
+
+        return recommendations
+
+    except Exception as e:
+        logger.error(
+            "Failed to get project recommendations",
+            extra={"extra": {"error": str(e), "project_id": req.project_id}},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Project recommendations failed: {str(e)}",
+        )
+
+
+@app.get("/cross-project/analysis")
+async def get_cross_project_analysis():
+    """Get cross-project pattern analysis and insights"""
+    try:
+        logger.info("Getting cross-project analysis")
+
+        analysis = cross_project_service.analyze_cross_project_patterns()
+
+        logger.info(
+            "Generated cross-project analysis",
+            extra={
+                "extra": {
+                    "total_projects": analysis.get("total_projects", 0),
+                    "insights_count": len(analysis.get("cross_project_insights", [])),
+                }
+            },
+        )
+
+        return analysis
+
+    except Exception as e:
+        logger.error(
+            "Failed to get cross-project analysis",
+            extra={"extra": {"error": str(e)}},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cross-project analysis failed: {str(e)}",
+        )
 
 
 # --- WebSocket Endpoints ---
