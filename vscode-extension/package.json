@@ -114,6 +114,31 @@
         "command": "autogen.startServer",
         "title": "Start MCP Server",
         "category": "AutoGen"
+      },
+      {
+        "command": "autogen.openMemoryAnalyticsDashboard",
+        "title": "Open Memory Analytics Dashboard",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.openCrossProjectPanel",
+        "title": "Open Cross-Project Intelligence",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.optimizeMemory",
+        "title": "Optimize Memory",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.registerProject",
+        "title": "Register Project",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.getProjectRecommendations",
+        "title": "Get Project Recommendations",
+        "category": "AutoGen"
       }
     ],
     "views": {

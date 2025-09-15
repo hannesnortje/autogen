@@ -7,6 +7,8 @@ import { AutoGenStatusBar, registerStatusBarCommands } from './statusBar';
 import { registerAgentConfigurationCommand } from './agentConfigPanel';
 import { registerSmartCommands } from './smartCommands';
 import { RealtimeClient } from './realtime';
+import { registerMemoryAnalyticsDashboard } from './memoryAnalyticsDashboard';
+import { registerCrossProjectPanel } from './crossProjectPanel';
 
 // Import workspace integration services
 import { WorkspaceManager } from './services/workspaceManager';
@@ -136,6 +138,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register agent configuration command
     registerAgentConfigurationCommand(context, mcpClient);
+
+    // Register memory analytics dashboard
+    registerMemoryAnalyticsDashboard(context, mcpClient);
+
+    // Register cross-project intelligence panel
+    registerCrossProjectPanel(context, mcpClient);
 
     // Register smart commands
     const smartCommandPalette = registerSmartCommands(context, mcpClient, sessionTreeProvider);

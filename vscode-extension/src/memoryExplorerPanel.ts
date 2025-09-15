@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { McpClient } from './mcpClient';
+import { McpClient, MemoryHealthStatus, MemoryMetrics, ProjectRecommendationsRequest, ProjectRecommendationsResponse } from './mcpClient';
 
 export interface IMemoryExplorerPanel {
     readonly panel: vscode.WebviewPanel;
@@ -68,6 +68,9 @@ export class MemoryExplorerPanelProvider {
 class MemoryExplorerPanel implements IMemoryExplorerPanel {
     public readonly panel: vscode.WebviewPanel;
     private readonly disposables: vscode.Disposable[] = [];
+    private healthData: MemoryHealthStatus | null = null;
+    private metricsData: MemoryMetrics | null = null;
+    private recommendationsData: ProjectRecommendationsResponse | null = null;
 
     constructor(
         panel: vscode.WebviewPanel,
@@ -109,6 +112,18 @@ class MemoryExplorerPanel implements IMemoryExplorerPanel {
                         break;
                     case 'deleteMemory':
                         await this.handleDeleteMemory(message.memoryId);
+                        break;
+                    case 'loadHealthData':
+                        await this.handleLoadHealthData();
+                        break;
+                    case 'loadMetricsData':
+                        await this.handleLoadMetricsData();
+                        break;
+                    case 'getCrossProjectSuggestions':
+                        await this.handleGetCrossProjectSuggestions(message.projectData);
+                        break;
+                    case 'refreshAnalytics':
+                        await this.handleRefreshAnalytics();
                         break;
                 }
             },
@@ -247,6 +262,94 @@ class MemoryExplorerPanel implements IMemoryExplorerPanel {
         // This would require an API endpoint to delete memories
         // For now, just show a notification
         vscode.window.showInformationMessage('Memory deletion would be implemented with server API');
+    }
+
+    private async handleLoadHealthData(): Promise<void> {
+        try {
+            const isConnected = await this.mcpClient.isServerAvailable();
+            if (!isConnected) {
+                this.panel.webview.postMessage({
+                    type: 'healthError',
+                    error: 'MCP server is not available'
+                });
+                return;
+            }
+
+            this.healthData = await this.mcpClient.getMemoryHealth();
+            this.panel.webview.postMessage({
+                type: 'healthData',
+                data: this.healthData
+            });
+
+        } catch (error) {
+            this.panel.webview.postMessage({
+                type: 'healthError',
+                error: error instanceof Error ? error.message : 'Failed to load health data'
+            });
+        }
+    }
+
+    private async handleLoadMetricsData(): Promise<void> {
+        try {
+            const isConnected = await this.mcpClient.isServerAvailable();
+            if (!isConnected) {
+                this.panel.webview.postMessage({
+                    type: 'metricsError',
+                    error: 'MCP server is not available'
+                });
+                return;
+            }
+
+            this.metricsData = await this.mcpClient.getMemoryMetrics();
+            this.panel.webview.postMessage({
+                type: 'metricsData',
+                data: this.metricsData
+            });
+
+        } catch (error) {
+            this.panel.webview.postMessage({
+                type: 'metricsError',
+                error: error instanceof Error ? error.message : 'Failed to load metrics data'
+            });
+        }
+    }
+
+    private async handleGetCrossProjectSuggestions(projectData: any): Promise<void> {
+        try {
+            const isConnected = await this.mcpClient.isServerAvailable();
+            if (!isConnected) {
+                this.panel.webview.postMessage({
+                    type: 'suggestionsError',
+                    error: 'MCP server is not available'
+                });
+                return;
+            }
+
+            const request: ProjectRecommendationsRequest = {
+                current_project: projectData,
+                recommendation_types: ['solution', 'pattern', 'best_practice'],
+                max_recommendations: 5
+            };
+
+            this.recommendationsData = await this.mcpClient.getProjectRecommendations(request);
+            this.panel.webview.postMessage({
+                type: 'suggestionsData',
+                data: this.recommendationsData
+            });
+
+        } catch (error) {
+            this.panel.webview.postMessage({
+                type: 'suggestionsError',
+                error: error instanceof Error ? error.message : 'Failed to get cross-project suggestions'
+            });
+        }
+    }
+
+    private async handleRefreshAnalytics(): Promise<void> {
+        await Promise.all([
+            this.handleLoadHealthData(),
+            this.handleLoadMetricsData()
+        ]);
     }
 
     private inferMemoryType(content: string): MemoryItem['type'] {
