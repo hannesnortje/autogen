@@ -115,6 +115,10 @@ export async function activate(context: vscode.ExtensionContext) {
             await checkServerStatus();
         }),
 
+        vscode.commands.registerCommand('autogen.startServer', async () => {
+            await startMcpServer();
+        }),
+
         vscode.commands.registerCommand('autogen.openSessionDashboard', async (sessionId: string) => {
             await openSessionDashboard(sessionId);
         }),
@@ -137,7 +141,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const smartCommandPalette = registerSmartCommands(context, mcpClient, sessionTreeProvider);
 
     // Register status bar commands
-    registerStatusBarCommands(context);
+    registerStatusBarCommands(context, mcpClient, statusBar);
 
     // Initialize enhanced status bar
     statusBar = new AutoGenStatusBar(context, mcpClient, sessionTreeProvider);
@@ -168,7 +172,15 @@ export async function activate(context: vscode.ExtensionContext) {
     // Auto-start server if configured
     const autoStart = config.get<boolean>('autoStart', false);
     if (autoStart) {
-        vscode.window.showInformationMessage('AutoGen MCP: Auto-start is enabled');
+        vscode.window.showInformationMessage('AutoGen MCP: Auto-start is enabled, starting server...');
+        setTimeout(async () => {
+            const success = await startMcpServer();
+            if (success) {
+                vscode.window.showInformationMessage('✅ AutoGen MCP Server auto-started successfully!');
+            } else {
+                vscode.window.showWarningMessage('⚠️ AutoGen MCP Server auto-start failed. You can start it manually.');
+            }
+        }, 2000); // Wait 2 seconds after extension activation
     }
 }
 
@@ -231,9 +243,109 @@ async function checkServerStatus() {
     if (isConnected) {
         vscode.window.showInformationMessage(`AutoGen MCP server is available at ${mcpClient.serverUrl}`);
     } else {
-        vscode.window.showErrorMessage(`AutoGen MCP server is not available at ${mcpClient.serverUrl}`);
+        // Show error with option to start server
+        const choice = await vscode.window.showErrorMessage(
+            `AutoGen MCP server is not available at ${mcpClient.serverUrl}`,
+            'Start Server',
+            'Check Again'
+        );
+
+        if (choice === 'Start Server') {
+            await startMcpServer();
+        } else if (choice === 'Check Again') {
+            // Recursive call to check again
+            setTimeout(() => checkServerStatus(), 1000);
+            return;
+        }
     }
     statusBar.refresh();
+}
+
+async function startMcpServer(): Promise<boolean> {
+    try {
+        // Check if server is already running
+        if (await checkServerConnection()) {
+            vscode.window.showInformationMessage('AutoGen MCP server is already running');
+            return true;
+        }
+
+        // Get workspace folder to determine the project path
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder found. Please open a folder first.');
+            return false;
+        }
+
+        const projectPath = workspaceFolder.uri.fsPath;
+
+        // Get configuration
+        const config = vscode.workspace.getConfiguration('autogen');
+        const serverCommand = config.get<string>('serverCommand', 'poetry run python -m autogen_mcp.server');
+        const timeout = config.get<number>('serverStartTimeout', 15);
+
+        // Show progress while starting server
+        return await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Starting AutoGen MCP Server',
+            cancellable: true
+        }, async (progress, token) => {
+            progress.report({ increment: 0, message: 'Initializing server...' });
+
+            // Create terminal for running the server
+            const terminal = vscode.window.createTerminal({
+                name: 'AutoGen MCP Server',
+                cwd: projectPath
+            });
+
+            // Show the terminal
+            terminal.show();
+
+            progress.report({ increment: 30, message: 'Starting server process...' });
+
+            // Send command to start the server
+            terminal.sendText(serverCommand);
+
+            // Wait a moment for the command to execute
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            progress.report({ increment: 60, message: 'Waiting for server to be ready...' });
+
+            // Poll for server availability with configurable timeout
+            const maxRetries = timeout; // Use configured timeout
+            let retries = 0;
+
+            while (retries < maxRetries && !token.isCancellationRequested) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                if (await checkServerConnection()) {
+                    progress.report({ increment: 100, message: 'Server started successfully!' });
+                    vscode.window.showInformationMessage('✅ AutoGen MCP Server started successfully!');
+                    statusBar.refresh();
+                    return true;
+                }
+
+                retries++;
+                progress.report({
+                    increment: Math.min(90, 60 + (retries * 2)),
+                    message: `Waiting for server... (${retries}/${maxRetries})`
+                });
+            }
+
+            if (token.isCancellationRequested) {
+                vscode.window.showWarningMessage('Server start cancelled by user');
+                return false;
+            }
+
+            // Server didn't start within timeout
+            vscode.window.showErrorMessage(`❌ AutoGen MCP Server failed to start within ${timeout} seconds. Please check the terminal for errors.`);
+            return false;
+        });
+
+    } catch (error) {
+        console.error('Failed to start MCP server:', error);
+        vscode.window.showErrorMessage(`Failed to start AutoGen MCP server: ${error}`);
+        return false;
+    }
 }
 
 async function startSession() {

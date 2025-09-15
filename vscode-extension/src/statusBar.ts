@@ -34,7 +34,7 @@ export class AutoGenStatusBar {
 
     private setupStatusBarItems(): void {
         // Server Status Item
-        this.serverStatusItem.command = 'autogen.checkServerStatus';
+        this.serverStatusItem.command = 'autogen.serverStatusAction';
         this.serverStatusItem.tooltip = 'Click to check AutoGen MCP server status';
 
         // Main Status Item
@@ -80,11 +80,11 @@ export class AutoGenStatusBar {
             // Update server status
             if (isConnected) {
                 this.serverStatusItem.text = '$(check) Server';
-                this.serverStatusItem.tooltip = `AutoGen MCP Server - Connected to ${this.mcpClient.serverUrl}`;
+                this.serverStatusItem.tooltip = `AutoGen MCP Server - Connected to ${this.mcpClient.serverUrl}\nClick to check status`;
                 this.serverStatusItem.backgroundColor = undefined;
             } else {
                 this.serverStatusItem.text = '$(x) Server';
-                this.serverStatusItem.tooltip = `AutoGen MCP Server - Disconnected from ${this.mcpClient.serverUrl}`;
+                this.serverStatusItem.tooltip = `AutoGen MCP Server - Disconnected from ${this.mcpClient.serverUrl}\n🚀 Click to start server automatically`;
                 this.serverStatusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
             }
 
@@ -172,7 +172,42 @@ export class AutoGenStatusBar {
 }
 
 // Register quick actions command
-export function registerStatusBarCommands(context: vscode.ExtensionContext): void {
+export function registerStatusBarCommands(context: vscode.ExtensionContext, mcpClient?: McpClient, statusBar?: AutoGenStatusBar): void {
+    const serverStatusActionCommand = vscode.commands.registerCommand('autogen.serverStatusAction', async () => {
+        // Check if server is available
+        if (!mcpClient) {
+            vscode.window.showErrorMessage('MCP Client not initialized');
+            return;
+        }
+
+        const isAvailable = await mcpClient.isServerAvailable();
+
+        if (isAvailable) {
+            vscode.window.showInformationMessage(`✅ AutoGen MCP server is available at ${mcpClient.serverUrl}`);
+        } else {
+            const choice = await vscode.window.showErrorMessage(
+                `❌ AutoGen MCP server is not available at ${mcpClient.serverUrl}`,
+                'Start Server',
+                'Check Again',
+                'Open Settings'
+            );
+
+            if (choice === 'Start Server') {
+                await vscode.commands.executeCommand('autogen.startServer');
+            } else if (choice === 'Check Again') {
+                // Re-run this command after a delay
+                setTimeout(() => vscode.commands.executeCommand('autogen.serverStatusAction'), 1000);
+            } else if (choice === 'Open Settings') {
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'autogen');
+            }
+        }
+
+        // Refresh status bar
+        if (statusBar) {
+            statusBar.refresh();
+        }
+    });
+
     const quickActionsCommand = vscode.commands.registerCommand('autogen.quickActions', async () => {
         const actions = [
             {
@@ -206,6 +241,11 @@ export function registerStatusBarCommands(context: vscode.ExtensionContext): voi
                 command: 'autogen.refreshAll'
             },
             {
+                label: '$(play) Start Server',
+                description: 'Start AutoGen MCP server',
+                command: 'autogen.startServer'
+            },
+            {
                 label: '$(gear) Check Server',
                 description: 'Check MCP server status',
                 command: 'autogen.checkServerStatus'
@@ -228,5 +268,5 @@ export function registerStatusBarCommands(context: vscode.ExtensionContext): voi
         vscode.window.showInformationMessage('AutoGen views refreshed');
     });
 
-    context.subscriptions.push(quickActionsCommand, refreshAllCommand);
+    context.subscriptions.push(serverStatusActionCommand, quickActionsCommand, refreshAllCommand);
 }

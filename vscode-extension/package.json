@@ -109,6 +109,11 @@
         "command": "autogen.stopSessionAdvanced",
         "title": "Stop Session (Advanced)",
         "category": "AutoGen"
+      },
+      {
+        "command": "autogen.startServer",
+        "title": "Start MCP Server",
+        "category": "AutoGen"
       }
     ],
     "views": {
@@ -167,6 +172,16 @@
           "type": "boolean",
           "default": false,
           "description": "Automatically start MCP server when extension activates"
+        },
+        "autogen.serverCommand": {
+          "type": "string",
+          "default": "poetry run python -m autogen_mcp.mcp_server",
+          "description": "Command to start the AutoGen MCP server"
+        },
+        "autogen.serverStartTimeout": {
+          "type": "number",
+          "default": 15,
+          "description": "Timeout in seconds to wait for server startup"
         },
         "autogen.agentConfigurations": {
           "type": "array",
