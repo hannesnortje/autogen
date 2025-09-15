@@ -1,6 +1,7 @@
 """
 Agent orchestrator for AutoGen MCP.
 Coordinates agent lifecycles and integrates Gemini completions with memory.
+Enhanced with comprehensive knowledge management capabilities.
 """
 
 import uuid
@@ -9,6 +10,11 @@ from autogen_mcp.agents import create_agent
 from autogen_mcp.gemini_client import GeminiClient
 from autogen_mcp.simple_agent_memory import AgentMemoryService
 from autogen_mcp.collections import CollectionManager
+from autogen_mcp.knowledge_management import (
+    KnowledgeManagementService,
+    KnowledgeManagementConfig,
+)
+from autogen_mcp.multi_memory import MultiScopeMemoryService
 
 
 class AgentOrchestrator:
@@ -17,14 +23,22 @@ class AgentOrchestrator:
         agent_configs: List[Dict[str, Any]],
         gemini_client: GeminiClient,
         collection_manager: Optional[CollectionManager] = None,
+        knowledge_config: Optional[KnowledgeManagementConfig] = None,
     ):
         self.gemini = gemini_client
         self.collection_manager = collection_manager
         self.memory_service = None
+        self.knowledge_management = None
 
         # Initialize memory service if collection manager available
         if collection_manager:
             self.memory_service = AgentMemoryService(collection_manager)
+
+            # Initialize knowledge management system
+            multi_memory_service = MultiScopeMemoryService(collection_manager)
+            self.knowledge_management = KnowledgeManagementService(
+                multi_memory_service, collection_manager, knowledge_config
+            )
 
         # Create agents with memory service
         self.agents = [
@@ -170,7 +184,54 @@ class AgentOrchestrator:
                 for agent in self.agents
             ],
             "memory_enabled": self.memory_service is not None,
+            "knowledge_management_enabled": self.knowledge_management is not None,
         }
+
+    def initialize_knowledge_system(
+        self, project_ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Initialize the knowledge management system."""
+        if not self.knowledge_management:
+            return {
+                "error": "Knowledge management not available - no collection manager",
+                "success": False,
+            }
+
+        return self.knowledge_management.initialize_knowledge_system(project_ids)
+
+    def run_maintenance_cycle(self) -> Dict[str, Any]:
+        """Run knowledge management maintenance cycle."""
+        if not self.knowledge_management:
+            return {
+                "error": "Knowledge management not available",
+                "success": False,
+            }
+
+        return self.knowledge_management.run_maintenance_cycle()
+
+    def get_knowledge_system_health(self) -> Dict[str, Any]:
+        """Get knowledge management system health."""
+        if not self.knowledge_management:
+            return {
+                "error": "Knowledge management not available",
+                "overall_status": "unavailable",
+            }
+
+        return self.knowledge_management.get_system_health()
+
+    def export_knowledge(self, output_path: str) -> Dict[str, Any]:
+        """Export system knowledge."""
+        if not self.knowledge_management:
+            return {"error": "Knowledge management not available", "success": False}
+
+        return self.knowledge_management.export_system_knowledge(output_path)
+
+    def import_knowledge(self, import_path: str) -> Dict[str, Any]:
+        """Import system knowledge."""
+        if not self.knowledge_management:
+            return {"error": "Knowledge management not available", "success": False}
+
+        return self.knowledge_management.import_system_knowledge(import_path)
 
 
 # Example usage (to be replaced with CLI or server integration)
