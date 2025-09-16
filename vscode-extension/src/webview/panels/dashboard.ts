@@ -1,4 +1,4 @@
-import { html, css } from 'lit';
+import { html, css, CSSResultGroup } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { BasePanel } from '../components/base/base-panel.js';
 import { sharedStyles } from '../shared/styles.js';
@@ -7,7 +7,7 @@ import { themeProperty } from '../shared/themes.js';
 /**
  * Server status information received from extension
  */
-interface ServerStatus {
+interface ServerStatusInfo {
   status: string;
   isHealthy: boolean;
   statusText: string;
@@ -49,7 +49,7 @@ export class AutoGenDashboard extends BasePanel {
   projectName = 'AutoGen Agile Project';
 
   @property({ type: Object })
-  serverStatus: ServerStatus | null = null;
+  serverStatus: ServerStatusInfo | null = null;
 
   @state()
   private _executingAction: string | null = null;
@@ -57,9 +57,8 @@ export class AutoGenDashboard extends BasePanel {
   @themeProperty()
   theme!: string;
 
-  static styles = css`
-    ${sharedStyles}
-
+  static get styles(): CSSResultGroup {
+    return [super.styles, sharedStyles, css`
     .server-status {
       background-color: var(--vscode-input-background);
       border: 1px solid var(--vscode-panel-border);
@@ -247,7 +246,8 @@ export class AutoGenDashboard extends BasePanel {
       opacity: 0.7;
       font-style: italic;
     }
-  `;
+    `];
+  }
 
   constructor() {
     super();
@@ -351,7 +351,7 @@ export class AutoGenDashboard extends BasePanel {
         </div>
 
         <div class="status-actions">
-          ${this.serverStatus.availableActions.map(action => html`
+          ${this.serverStatus?.availableActions?.map((action: any) => html`
             <button
               class="action-btn ${action.id === 'connect' || action.id === 'start' ? 'primary' : ''}"
               ?disabled=${!action.enabled || this._executingAction === action.id}
@@ -359,11 +359,10 @@ export class AutoGenDashboard extends BasePanel {
               @click="${() => this._executeServerAction(action.id)}"
             >
               ${this._executingAction === action.id
-                ? '⏳'
-                : action.icon.replace(/\$\((.*?)\)/, '$1')}
-              ${this._executingAction === action.id ? 'Working...' : action.label}
+                ? '⏳ Working...'
+                : action.label}
             </button>
-          `)}
+          `) || html`<div style="color: red;">Actions not rendered - length: ${this.serverStatus?.availableActions?.length}</div>`}
         </div>
       </div>
     `;
@@ -515,9 +514,8 @@ export class AutoGenDashboard extends BasePanel {
 
   connectedCallback() {
     super.connectedCallback();
-    console.log('AutoGen Dashboard connected to DOM');
 
-    // Request initial server status
+    // Request initial server status from extension
     this._sendMessage('getServerStatus');
   }
 

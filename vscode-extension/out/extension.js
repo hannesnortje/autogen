@@ -295,7 +295,7 @@ function getWebviewContent(webview, extensionPath) {
             color: var(--vscode-foreground);
             background-color: var(--vscode-editor-background);
         }
-        
+
         autogen-dashboard {
             display: block;
             width: 100%;
@@ -305,16 +305,16 @@ function getWebviewContent(webview, extensionPath) {
 </head>
 <body>
     <autogen-dashboard id="dashboard"></autogen-dashboard>
-    
+
     <script nonce="${nonce}">
         // Set up VS Code API
         const vscode = acquireVsCodeApi();
         window.vscode = vscode;
-        
+
         // Log to console for debugging
         console.log('Dashboard webview loaded');
     </script>
-    
+
     <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;

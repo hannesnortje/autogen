@@ -1350,9 +1350,8 @@ var AutoGenDashboard = (function (exports) {
      * Now includes comprehensive server connection status and controls
      */
     exports.AutoGenDashboard = class AutoGenDashboard extends BasePanel {
-        static { this.styles = i$3 `
-    ${sharedStyles}
-
+        static get styles() {
+            return [super.styles, sharedStyles, i$3 `
     .server-status {
       background-color: var(--vscode-input-background);
       border: 1px solid var(--vscode-panel-border);
@@ -1540,7 +1539,8 @@ var AutoGenDashboard = (function (exports) {
       opacity: 0.7;
       font-style: italic;
     }
-  `; }
+    `];
+        }
         constructor() {
             super();
             this.projectName = 'AutoGen Agile Project';
@@ -1589,18 +1589,18 @@ var AutoGenDashboard = (function (exports) {
       </div>
 
       <div class="actions">
-        <button 
-          class="btn primary" 
+        <button
+          class="btn primary"
           ?disabled=${!isConnected || isConnecting}
           @click="${this._startNewSession}"
         >
           ${isConnecting ? 'Starting...' : 'Start New Session'}
         </button>
-        
+
         <button class="btn secondary" @click="${this._openSettings}">
           Settings
         </button>
-        
+
         <button class="btn secondary" @click="${this._viewLogs}">
           View Logs
         </button>
@@ -1638,9 +1638,9 @@ var AutoGenDashboard = (function (exports) {
             </div>
           </div>
         </div>
-        
+
         <div class="status-actions">
-          ${this.serverStatus.availableActions.map(action => x `
+          ${this.serverStatus?.availableActions?.map((action) => x `
             <button
               class="action-btn ${action.id === 'connect' || action.id === 'start' ? 'primary' : ''}"
               ?disabled=${!action.enabled || this._executingAction === action.id}
@@ -1648,11 +1648,10 @@ var AutoGenDashboard = (function (exports) {
               @click="${() => this._executeServerAction(action.id)}"
             >
               ${this._executingAction === action.id
-            ? '⏳'
-            : action.icon.replace(/\$\((.*?)\)/, '$1')}
-              ${this._executingAction === action.id ? 'Working...' : action.label}
+            ? '⏳ Working...'
+            : action.label}
             </button>
-          `)}
+          `) || x `<div style="color: red;">Actions not rendered - length: ${this.serverStatus?.availableActions?.length}</div>`}
         </div>
       </div>
     `;
@@ -1668,32 +1667,32 @@ var AutoGenDashboard = (function (exports) {
           <div class="detail-label">Server URL</div>
           <div class="detail-value">${connection.url}</div>
         </div>
-        
+
         <div class="detail-item">
           <div class="detail-label">Server Type</div>
           <div class="detail-value">${connection.config.type}</div>
         </div>
-        
+
         ${connection.connectedAt ? x `
           <div class="detail-item">
             <div class="detail-label">Connected Since</div>
             <div class="detail-value">${this._formatDateTime(connection.connectedAt)}</div>
           </div>
         ` : ''}
-        
+
         ${connection.lastHealthCheck ? x `
           <div class="detail-item">
             <div class="detail-label">Last Health Check</div>
             <div class="detail-value">${this._formatDateTime(connection.lastHealthCheck)}</div>
           </div>
         ` : ''}
-        
+
         ${metrics ? x `
           <div class="detail-item">
             <div class="detail-label">Health Checks</div>
             <div class="detail-value">${metrics.healthChecks} (${metrics.failedHealthChecks} failed)</div>
           </div>
-          
+
           <div class="detail-item">
             <div class="detail-label">Avg Response Time</div>
             <div class="detail-value">${Math.round(metrics.averageResponseTime)}ms</div>
@@ -1792,8 +1791,7 @@ var AutoGenDashboard = (function (exports) {
         }
         connectedCallback() {
             super.connectedCallback();
-            console.log('AutoGen Dashboard connected to DOM');
-            // Request initial server status
+            // Request initial server status from extension
             this._sendMessage('getServerStatus');
         }
         disconnectedCallback() {
