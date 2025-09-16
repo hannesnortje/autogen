@@ -219,13 +219,18 @@ export class ServerManager implements IServerManager {
             return;
         }
 
-        const serverPath = this.config.serverPath || this.findServerPath();
-        if (!serverPath) {
-            throw new Error('AutoGen server path not configured and not found in PATH');
+        const projectPath = this.config.serverPath || this.findServerPath();
+        if (!projectPath) {
+            throw new Error('AutoGen server path not configured. Set autogen.server.path');
         }
 
-        if (!fs.existsSync(serverPath)) {
-            throw new Error(`Server executable not found at: ${serverPath}`);
+        if (!fs.existsSync(projectPath)) {
+            throw new Error(`AutoGen project path not found: ${projectPath}`);
+        }
+        // Ensure pyproject exists as a sanity check
+        const pyproject = path.join(projectPath, 'pyproject.toml');
+        if (!fs.existsSync(pyproject)) {
+            this.log(`Warning: pyproject.toml not found in ${projectPath}. Continuing regardless.`);
         }
 
         return new Promise((resolve, reject) => {
@@ -234,8 +239,12 @@ export class ServerManager implements IServerManager {
                 connectionId: this.connection?.id || 'unknown'
             });
 
-            // Start server process
-            this.serverProcess = spawn(serverPath, [`--port=${this.config.port}`], {
+            // Start server process via Poetry
+            const command = process.platform === 'win32' ? 'poetry.exe' : 'poetry';
+            const args = ['run', 'python', '-m', 'src.autogen_mcp.mcp_server', `--port=${this.config.port}`];
+            this.log(`Starting server: ${command} ${args.join(' ')} (cwd=${projectPath})`);
+            this.serverProcess = spawn(command, args, {
+                cwd: projectPath,
                 detached: false,
                 stdio: this.config.debug ? 'pipe' : 'ignore'
             });

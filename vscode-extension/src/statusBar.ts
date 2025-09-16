@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { McpClient } from './mcpClient';
+import { ServerManager } from './services/server-manager';
 
 export class AutoGenStatusBar {
     private statusBarItem: vscode.StatusBarItem;
@@ -10,7 +11,8 @@ export class AutoGenStatusBar {
 
     constructor(
         private context: vscode.ExtensionContext,
-        private mcpClient: McpClient
+        private mcpClient: McpClient,
+        private serverManager?: ServerManager
     ) {
         // Create status bar items with different priorities (higher priority = left position)
         this.serverStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 104);
@@ -126,6 +128,10 @@ export class AutoGenStatusBar {
 
     private async checkServerConnection(): Promise<boolean> {
         try {
+            if (this.serverManager) {
+                const health = await this.serverManager.healthCheck();
+                return health.status === 'healthy';
+            }
             return await this.mcpClient.isServerAvailable();
         } catch (error) {
             return false;

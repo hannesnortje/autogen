@@ -1,3 +1,9 @@
 {
-    "autogen.serverUrl": "http://localhost:9000"
+    "autogen.serverUrl": "http://localhost:9000",
+    "autogen": {
+        "serverPath": "/media/hannesn/storage/Code/autogen",
+        "workingDirectory": "/media/hannesn/storage/Code/autogen",
+        "port": 9000,
+        "timeout": 30000
+    }
 }

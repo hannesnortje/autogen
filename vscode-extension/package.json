@@ -173,12 +173,14 @@
         {
           "id": "autogen.sessionView",
           "name": "Sessions",
-          "when": "true"
+          "when": "true",
+          "icon": "./media/sessions.svg"
         },
         {
           "id": "autogen.memoryView",
           "name": "Memory",
-          "when": "true"
+          "when": "true",
+          "icon": "./media/memory.svg"
         }
       ]
     },
@@ -208,37 +210,42 @@
         {
           "id": "autogen",
           "title": "AutoGen",
-          "icon": "$(robot)"
+          "icon": "./media/robot.svg"
         }
       ]
     },
     "configuration": {
       "title": "AutoGen MCP",
       "properties": {
-        "autogen.serverUrl": {
+        "autogen.server.url": {
           "type": "string",
           "default": "http://localhost:9000",
-          "description": "URL of the AutoGen MCP server"
+          "description": "AutoGen MCP server URL"
         },
-        "autogen.autoStart": {
+        "autogen.server.autoStart": {
           "type": "boolean",
-          "default": false,
-          "description": "Automatically start MCP server when extension activates"
+          "default": true,
+          "description": "Automatically start server if not running"
         },
-        "autogen.serverCommand": {
-          "type": "string",
-          "default": "poetry run python -m src.autogen_mcp.mcp_server",
-          "description": "Command to start the AutoGen MCP server"
-        },
-        "autogen.serverPath": {
+        "autogen.server.path": {
           "type": "string",
           "default": "/media/hannesn/storage/Code/autogen",
-          "description": "Path to the AutoGen project directory containing pyproject.toml"
+          "description": "Path to the AutoGen project directory (contains pyproject.toml)"
         },
-        "autogen.serverStartTimeout": {
+        "autogen.server.healthCheckInterval": {
           "type": "number",
-          "default": 15,
-          "description": "Timeout in seconds to wait for server startup"
+          "default": 30000,
+          "description": "Health check interval in milliseconds"
+        },
+        "autogen.server.connectionTimeout": {
+          "type": "number",
+          "default": 10000,
+          "description": "Connection timeout in milliseconds"
+        },
+        "autogen.memory.refreshInterval": {
+          "type": "number",
+          "default": 30,
+          "description": "Memory refresh interval in seconds"
         },
         "autogen.websocketUrl": {
           "type": "string",
