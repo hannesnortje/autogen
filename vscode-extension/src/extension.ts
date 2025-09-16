@@ -56,9 +56,6 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize all workspace configurations
     await workspaceConfig.initializeWorkspaces();
 
-    // Register status bar commands
-    registerStatusBarCommands(context, mcpClient, autoGenStatusBar);
-
         // Register commands
     context.subscriptions.push(
     vscode.commands.registerCommand('autogen.connect', connectToServer),
@@ -72,7 +69,7 @@ export async function activate(context: vscode.ExtensionContext) {
         outputChannel
     );
 
-    // Register status bar commands
+    // Register status bar commands (only once)
     registerStatusBarCommands(context, mcpClient, autoGenStatusBar);
 
     // Listen for workspace changes to auto-configure new folders

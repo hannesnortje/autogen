@@ -82,11 +82,9 @@ async function activate(context) {
     outputChannel.appendLine('Status bar items created and shown');
     // Initialize all workspace configurations
     await workspaceConfig.initializeWorkspaces();
-    // Register status bar commands
-    (0, statusBar_1.registerStatusBarCommands)(context, mcpClient, autoGenStatusBar);
     // Register commands
     context.subscriptions.push(vscode.commands.registerCommand('autogen.connect', connectToServer), vscode.commands.registerCommand('autogen.disconnect', disconnectFromServer), vscode.commands.registerCommand('autogen.toggleConnection', toggleConnection), vscode.commands.registerCommand('autogen.configureWorkspace', configureCurrentWorkspace), vscode.commands.registerCommand('autogen.showDashboard', () => showDashboard(context)), vscode.commands.registerCommand('autogen.startServer', startMcpServer), vscode.commands.registerCommand('autogen.stopServer', stopMcpServer), statusBarItem, outputChannel);
-    // Register status bar commands
+    // Register status bar commands (only once)
     (0, statusBar_1.registerStatusBarCommands)(context, mcpClient, autoGenStatusBar);
     // Listen for workspace changes to auto-configure new folders
     vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {

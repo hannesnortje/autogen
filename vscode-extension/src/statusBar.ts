@@ -128,122 +128,186 @@ export class AutoGenStatusBar {
 
     private async checkServerConnection(): Promise<boolean> {
         try {
+            // Add timeout to prevent hanging calls
+            const timeoutPromise = new Promise<boolean>((_, reject) =>
+                setTimeout(() => reject(new Error('Health check timeout')), 5000)
+            );
+
             if (this.serverManager) {
-                const health = await this.serverManager.healthCheck();
-                return health.status === 'healthy';
+                const healthPromise = this.serverManager.healthCheck();
+                const health = await Promise.race([healthPromise, timeoutPromise.then(() => ({ status: 'timeout' }))]);
+                return typeof health === 'object' && health.status === 'healthy';
+            } else if (this.mcpClient) {
+                const availablePromise = this.mcpClient.isServerAvailable();
+                return await Promise.race([availablePromise, timeoutPromise]);
             }
-            return await this.mcpClient.isServerAvailable();
+            return false;
         } catch (error) {
+            console.log('Health check failed:', error);
             return false;
         }
     }
 
     private startPeriodicUpdate(): void {
-        // Update status every 30 seconds
-        this.refreshTimer = setInterval(() => {
-            this.updateStatusBar();
+        // Clear any existing timer first
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+        }
+
+        // Update status every 30 seconds, but prevent overlapping calls
+        let isUpdating = false;
+        this.refreshTimer = setInterval(async () => {
+            if (!isUpdating) {
+                isUpdating = true;
+                try {
+                    await this.updateStatusBar();
+                } catch (error) {
+                    console.error('Periodic status update failed:', error);
+                } finally {
+                    isUpdating = false;
+                }
+            }
         }, 30000);
     }
 
     public dispose(): void {
+        // Clean up timer
         if (this.refreshTimer) {
             clearInterval(this.refreshTimer);
             this.refreshTimer = undefined;
         }
+
+        // Hide all status bar items
         this.hideAll();
+
+        // Dispose status bar items properly
+        try {
+            this.serverStatusItem.dispose();
+            this.statusBarItem.dispose();
+            this.agentCountItem.dispose();
+            this.quickActionItem.dispose();
+        } catch (error) {
+            console.error('Error disposing status bar items:', error);
+        }
     }
 
     // Public method to trigger immediate update
-    public refresh(): void {
-        this.updateStatusBar();
+    public async refresh(): Promise<void> {
+        try {
+            await this.updateStatusBar();
+        } catch (error) {
+            console.error('Status bar refresh failed:', error);
+        }
     }
 }
 
 // Register quick actions command
 export function registerStatusBarCommands(context: vscode.ExtensionContext, mcpClient?: McpClient, statusBar?: AutoGenStatusBar): void {
     const serverStatusActionCommand = vscode.commands.registerCommand('autogen.serverStatusAction', async () => {
-        // Check if server is available
-        if (!mcpClient) {
-            vscode.window.showErrorMessage('MCP Client not initialized');
-            return;
-        }
-
-        const isAvailable = await mcpClient.isServerAvailable();
-
-        if (isAvailable) {
-            vscode.window.showInformationMessage(`✅ AutoGen MCP server is available at ${mcpClient.serverUrl}`);
-        } else {
-            const choice = await vscode.window.showErrorMessage(
-                `❌ AutoGen MCP server is not available at ${mcpClient.serverUrl}`,
-                'Start Server',
-                'Check Again',
-                'Open Settings'
-            );
-
-            if (choice === 'Start Server') {
-                await vscode.commands.executeCommand('autogen.startServer');
-            } else if (choice === 'Check Again') {
-                // Re-run this command after a delay
-                setTimeout(() => vscode.commands.executeCommand('autogen.serverStatusAction'), 1000);
-            } else if (choice === 'Open Settings') {
-                await vscode.commands.executeCommand('workbench.action.openSettings', 'autogen');
+        try {
+            // Check if server is available
+            if (!mcpClient) {
+                vscode.window.showErrorMessage('MCP Client not initialized');
+                return;
             }
-        }
 
-        // Refresh status bar
-        if (statusBar) {
-            statusBar.refresh();
+            const isAvailable = await mcpClient.isServerAvailable();
+
+            if (isAvailable) {
+                vscode.window.showInformationMessage(`✅ AutoGen MCP server is available at ${mcpClient.serverUrl}`);
+            } else {
+                const choice = await vscode.window.showErrorMessage(
+                    `❌ AutoGen MCP server is not available at ${mcpClient.serverUrl}`,
+                    'Start Server',
+                    'Check Again',
+                    'Open Settings'
+                );
+
+                if (choice === 'Start Server') {
+                    await vscode.commands.executeCommand('autogen.startServer');
+                } else if (choice === 'Check Again') {
+                    // Re-run this command after a delay (prevent immediate recursion)
+                    setTimeout(() => vscode.commands.executeCommand('autogen.serverStatusAction'), 1000);
+                } else if (choice === 'Open Settings') {
+                    await vscode.commands.executeCommand('workbench.action.openSettings', 'autogen');
+                }
+            }
+
+            // Refresh status bar safely
+            if (statusBar) {
+                statusBar.refresh();
+            }
+        } catch (error) {
+            console.error('Server status action failed:', error);
+            vscode.window.showErrorMessage(`Server status check failed: ${error}`);
         }
     });
 
     const quickActionsCommand = vscode.commands.registerCommand('autogen.quickActions', async () => {
-        const actions = [
-            {
-                label: '$(play) Start Session',
-                description: 'Start a new AutoGen session',
-                command: 'autogen.connect'
-            },
-            {
-                label: '$(stop) Stop Session',
-                description: 'Stop the current AutoGen session',
-                command: 'autogen.disconnect'
-            },
-            {
-                label: '$(dashboard) Dashboard',
-                description: 'Open AutoGen dashboard',
-                command: 'autogen.showDashboard'
-            },
-            {
-                label: '$(play) Start Server',
-                description: 'Start AutoGen MCP server',
-                command: 'autogen.startServer'
-            },
-            {
-                label: '$(gear) Configure Workspace',
-                description: 'Configure current workspace for AutoGen',
-                command: 'autogen.configureWorkspace'
-            },
-            {
-                label: '$(refresh) Refresh Status',
-                description: 'Refresh server status',
-                command: 'autogen.refreshStatus'
+        try {
+            const actions = [
+                {
+                    label: '$(play) Start Session',
+                    description: 'Start a new AutoGen session',
+                    command: 'autogen.connect'
+                },
+                {
+                    label: '$(stop) Stop Session',
+                    description: 'Stop the current AutoGen session',
+                    command: 'autogen.disconnect'
+                },
+                {
+                    label: '$(dashboard) Dashboard',
+                    description: 'Open AutoGen dashboard',
+                    command: 'autogen.showDashboard'
+                },
+                {
+                    label: '$(play) Start Server',
+                    description: 'Start AutoGen MCP server',
+                    command: 'autogen.startServer'
+                },
+                {
+                    label: '$(stop) Stop Server',
+                    description: 'Stop AutoGen MCP server',
+                    command: 'autogen.stopServer'
+                },
+                {
+                    label: '$(gear) Configure Workspace',
+                    description: 'Configure current workspace for AutoGen',
+                    command: 'autogen.configureWorkspace'
+                },
+                {
+                    label: '$(refresh) Refresh Status',
+                    description: 'Refresh server status',
+                    command: 'autogen.refreshStatus'
+                }
+            ];
+
+            const selected = await vscode.window.showQuickPick(actions, {
+                placeHolder: 'Select an AutoGen action',
+                matchOnDescription: true
+            });
+
+            if (selected) {
+                await vscode.commands.executeCommand(selected.command);
             }
-        ];
-
-        const selected = await vscode.window.showQuickPick(actions, {
-            placeHolder: 'Select an AutoGen action',
-            matchOnDescription: true
-        });
-
-        if (selected) {
-            await vscode.commands.executeCommand(selected.command);
+        } catch (error) {
+            console.error('Quick actions failed:', error);
+            vscode.window.showErrorMessage(`Quick actions failed: ${error}`);
         }
     });
 
     const refreshStatusCommand = vscode.commands.registerCommand('autogen.refreshStatus', async () => {
-        if (statusBar) {
-            statusBar.refresh();
-            vscode.window.showInformationMessage('AutoGen status refreshed');
+        try {
+            if (statusBar) {
+                await statusBar.refresh();
+                vscode.window.showInformationMessage('AutoGen status refreshed');
+            } else {
+                vscode.window.showWarningMessage('Status bar not available');
+            }
+        } catch (error) {
+            console.error('Refresh status failed:', error);
+            vscode.window.showErrorMessage(`Refresh failed: ${error}`);
         }
     });
 
