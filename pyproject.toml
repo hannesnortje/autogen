@@ -13,6 +13,9 @@ fastembed = "^0.3.5"
 scikit-learn = "^1.5.0"
 fastapi = "^0.116.1"
 uvicorn = {extras = ["standard"], version = "^0.35.0"}
+# UI-specific dependencies for PySide6 desktop application
+PySide6 = "^6.7.0"              # Qt6 Python bindings for desktop UI
+websockets = "^12.0"            # WebSocket client for real-time MCP server updates
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -26,6 +29,8 @@ python-dotenv = "^1.1.1"
 uvicorn = "^0.35.0"
 httpx = "^0.28.1"
 pytest-asyncio = "^1.2.0"
+# UI testing dependencies
+pytest-qt = "^4.2.0"           # Qt widget testing framework
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
