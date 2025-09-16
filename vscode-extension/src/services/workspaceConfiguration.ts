@@ -3,7 +3,7 @@ import { WorkspaceManager, ProjectInfo } from './workspaceManager';
 import { FileWatcher, FileWatchConfig } from './fileWatcher';
 import { FileOperations, FileOperationsConfig } from './fileOperations';
 import { GitIntegration, GitConfig } from './gitIntegration';
-import { RealtimeClient } from '../realtime';
+// import { RealtimeClient } from '../realtime';
 
 /**
  * Combined workspace configuration
@@ -43,7 +43,7 @@ export class WorkspaceConfiguration {
     private fileWatcher: FileWatcher;
     private fileOperations: FileOperations;
     private gitIntegration: GitIntegration;
-    private realtimeClient: RealtimeClient;
+    // private realtimeClient: RealtimeClient;
     private configurations = new Map<string, WorkspaceConfig>();
 
     constructor(
@@ -51,13 +51,13 @@ export class WorkspaceConfiguration {
         fileWatcher: FileWatcher,
         fileOperations: FileOperations,
         gitIntegration: GitIntegration,
-        realtimeClient: RealtimeClient
+        // realtimeClient: RealtimeClient
     ) {
         this.workspaceManager = workspaceManager;
         this.fileWatcher = fileWatcher;
         this.fileOperations = fileOperations;
         this.gitIntegration = gitIntegration;
-        this.realtimeClient = realtimeClient;
+        // this.realtimeClient = realtimeClient;
 
         this.initializeWorkspaces();
     }

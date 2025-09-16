@@ -43,6 +43,31 @@
         "category": "AutoGen"
       },
       {
+        "command": "autogen.connect",
+        "title": "Connect to Server",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.disconnect",
+        "title": "Disconnect from Server",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.toggleConnection",
+        "title": "Toggle Connection",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.configureWorkspace",
+        "title": "Configure Workspace",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.showDashboard",
+        "title": "Show Dashboard",
+        "category": "AutoGen"
+      },
+      {
         "command": "autogen.showDashboard",
         "title": "Show Dashboard",
         "category": "AutoGen"
@@ -263,6 +288,7 @@
     "watch": "tsc -watch -p ./",
     "build:webview": "rollup -c",
     "watch:webview": "rollup -c -w",
+    "package": "vsce package",
     "pretest": "npm run compile",
     "test": "node ./out/test/runTest.js",
     "lint": "eslint src --ext ts"

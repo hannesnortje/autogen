@@ -2,9 +2,9 @@ const { nodeResolve } = require('@rollup/plugin-node-resolve');
 const typescript = require('@rollup/plugin-typescript');
 
 module.exports = {
-  input: 'src/webview/panels/dashboard.ts',
+  input: 'src/webview/dashboard-app.ts',
   output: {
-    file: 'out/webview/dashboard.js',
+    file: 'out/webview/dashboard-bundle.js',
     format: 'iife',
     name: 'AutoGenDashboard',
     sourcemap: true
@@ -24,6 +24,7 @@ module.exports = {
   onwarn(warning, warn) {
     // Suppress certain warnings
     if (warning.code === 'THIS_IS_UNDEFINED') return;
+    if (warning.code === 'CIRCULAR_DEPENDENCY') return;
     warn(warning);
   }
 };

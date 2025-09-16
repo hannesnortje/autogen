@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { RealtimeClient } from '../realtime';
+// import { RealtimeClient } from '../realtime';
 
 /**
  * File change events
@@ -29,13 +29,13 @@ export interface FileWatchConfig {
  */
 export class FileWatcher {
     private watchers: Map<string, vscode.FileSystemWatcher> = new Map();
-    private realtimeClient: RealtimeClient;
+    // private realtimeClient: RealtimeClient;
     private config: FileWatchConfig;
     private pendingUpdates: Map<string, FileChangeEvent> = new Map();
     private batchTimer: NodeJS.Timeout | null = null;
 
-    constructor(realtimeClient: RealtimeClient) {
-        this.realtimeClient = realtimeClient;
+    constructor(/* realtimeClient: RealtimeClient */) {
+        // this.realtimeClient = realtimeClient;
         this.config = this.getDefaultConfig();
     }
 
@@ -198,7 +198,7 @@ export class FileWatcher {
             }
 
             // Emit real-time update
-            this.realtimeClient.broadcast('file-change', event);
+            // this.realtimeClient.broadcast('file-change', event);
 
             // Show notification for significant changes
             if (event.type === 'created') {
@@ -218,24 +218,24 @@ export class FileWatcher {
     private async syncToMemory(event: FileChangeEvent): Promise<void> {
         if (event.type === 'deleted') {
             // Remove from memory service
-            this.realtimeClient.broadcast('memory-remove', {
-                type: 'file',
-                path: event.filePath,
-                workspace: event.workspaceFolder
-            });
+            // this.realtimeClient.broadcast('memory-remove', {
+            //     type: 'file',
+            //     path: event.filePath,
+            //     workspace: event.workspaceFolder
+            // });
         } else if (event.content) {
             // Add/update in memory service
-            this.realtimeClient.broadcast('memory-update', {
-                type: 'file',
-                path: event.filePath,
-                workspace: event.workspaceFolder,
-                content: event.content,
-                metadata: {
-                    lastModified: event.timestamp.toISOString(),
-                    fileType: path.extname(event.filePath),
-                    changeType: event.type
-                }
-            });
+            // this.realtimeClient.broadcast('memory-update', {
+            //     type: 'file',
+            //     path: event.filePath,
+            //     workspace: event.workspaceFolder,
+            //     content: event.content,
+            //     metadata: {
+            //         lastModified: event.timestamp.toISOString(),
+            //         fileType: path.extname(event.filePath),
+            //         changeType: event.type
+            //     }
+            // });
         }
     }
 
