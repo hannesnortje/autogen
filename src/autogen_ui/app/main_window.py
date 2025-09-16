@@ -32,6 +32,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import QSettings, QTimer, Qt, Signal
 
+from autogen_ui.widgets import MemoryBrowserWidget
+from autogen_ui.services import IntegrationConfig, IntegrationMode
+
 
 logger = logging.getLogger(__name__)
 
@@ -519,32 +522,19 @@ class MainWindow(QMainWindow):
         agent_config_widget.setWidget(agent_content)
         left_panel.addTab(agent_config_widget, "Agents")
 
-        # Memory configuration tab
-        memory_widget = QScrollArea()
-        memory_widget.setWidgetResizable(True)
-        memory_content = QWidget()
-        memory_layout = QVBoxLayout(memory_content)
+        # Memory browser tab - NEW: Functional memory browser
+        self.memory_browser = MemoryBrowserWidget()
 
-        memory_group = QGroupBox("Memory Settings")
-        memory_group_layout = QVBoxLayout(memory_group)
+        # Initialize memory service with default configuration
+        memory_config = IntegrationConfig(
+            mode=IntegrationMode.DIRECT,  # Try direct integration first
+            mcp_server_url="http://localhost:9000",
+            timeout=30,
+            retry_attempts=3,
+        )
+        self.memory_browser.initialize_memory_service(memory_config)
 
-        # Qdrant connection settings
-        qdrant_layout = QVBoxLayout()
-        qdrant_layout.addWidget(QLabel("Qdrant URL:"))
-        qdrant_input = QLineEdit()
-        qdrant_input.setPlaceholderText("http://localhost:6333")
-        qdrant_layout.addWidget(qdrant_input)
-
-        qdrant_layout.addWidget(QLabel("Collection Name:"))
-        collection_input = QLineEdit()
-        collection_input.setPlaceholderText("autogen_memory")
-        qdrant_layout.addWidget(collection_input)
-
-        memory_group_layout.addLayout(qdrant_layout)
-        memory_layout.addWidget(memory_group)
-        memory_layout.addStretch()
-        memory_widget.setWidget(memory_content)
-        left_panel.addTab(memory_widget, "Memory")
+        left_panel.addTab(self.memory_browser, "Memory")
 
         main_splitter.addWidget(left_panel)
 
@@ -1546,7 +1536,18 @@ class MainWindow(QMainWindow):
 
     def open_memory_browser(self) -> None:
         """Open memory browser dialog."""
-        QMessageBox.information(self, "Memory Browser", "Memory browser - coming soon!")
+        # Switch to Memory tab in the left panel
+        left_tabs = self.centralWidget().findChild(QTabWidget)
+        if left_tabs:
+            # Find Memory tab index
+            for i in range(left_tabs.count()):
+                if left_tabs.tabText(i) == "Memory":
+                    left_tabs.setCurrentIndex(i)
+                    msg = "Switched to Memory browser tab"
+                    self.statusBar().showMessage(msg)
+                    break
+        else:
+            self.statusBar().showMessage("Memory browser tab not found")
 
     def clear_memory(self) -> None:
         """Clear all memory entries."""
