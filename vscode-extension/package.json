@@ -42,6 +42,31 @@
         "command": "autoGenAgile.refreshSidebar",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "autoGenAgile.connectServer",
+        "title": "Connect to Server",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autoGenAgile.disconnectServer",
+        "title": "Disconnect from Server",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autoGenAgile.startServer",
+        "title": "Start Local Server",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autoGenAgile.stopServer",
+        "title": "Stop Local Server",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autogen.showServerStatus",
+        "title": "Show Server Status",
+        "category": "AutoGen"
       }
     ],
     "views": {
@@ -66,20 +91,67 @@
     "configuration": {
       "title": "AutoGen Agile Assistant",
       "properties": {
-        "autoGenAgile.mcpServerUrl": {
+        "autogen.server.url": {
           "type": "string",
-          "default": "ws://localhost:9000",
-          "description": "AutoGen MCP Server WebSocket URL"
+          "default": "http://localhost:9000",
+          "description": "AutoGen MCP Server URL",
+          "format": "uri",
+          "scope": "machine-overridable"
+        },
+        "autogen.server.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start server if not running",
+          "scope": "machine-overridable"
+        },
+        "autogen.server.path": {
+          "type": "string",
+          "description": "Path to AutoGen server installation",
+          "scope": "machine"
+        },
+        "autogen.server.healthCheckInterval": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 5000,
+          "description": "Health check interval in milliseconds",
+          "scope": "machine-overridable"
+        },
+        "autogen.server.connectionTimeout": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1000,
+          "description": "Connection timeout in milliseconds",
+          "scope": "machine-overridable"
+        },
+        "autogen.server.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "description": "Maximum retry attempts for failed connections",
+          "scope": "machine-overridable"
+        },
+        "autogen.server.retryDelay": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 1000,
+          "description": "Retry delay in milliseconds",
+          "scope": "machine-overridable"
+        },
+        "autogen.server.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug logging for server operations",
+          "scope": "machine-overridable"
         },
         "autoGenAgile.enableAutoRefresh": {
           "type": "boolean",
           "default": true,
-          "description": "Enable automatic refresh of project data"
+          "description": "Enable automatic refresh of project data (deprecated - use autogen.server.autoStart)"
         },
         "autoGenAgile.refreshInterval": {
           "type": "number",
           "default": 30000,
-          "description": "Refresh interval in milliseconds"
+          "description": "Refresh interval in milliseconds (deprecated - use autogen.server.healthCheckInterval)"
         }
       }
     }
