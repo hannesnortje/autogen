@@ -2,7 +2,7 @@ const { nodeResolve } = require('@rollup/plugin-node-resolve');
 const typescript = require('@rollup/plugin-typescript');
 
 module.exports = {
-  input: 'src/webview/dashboard.ts',
+  input: 'src/webview/panels/dashboard.ts',
   output: {
     file: 'out/webview/dashboard.js',
     format: 'iife',
