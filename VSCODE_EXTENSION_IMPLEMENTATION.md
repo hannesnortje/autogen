@@ -214,7 +214,7 @@ vscode-extension/
 - [ ] Connection status updates in real-time
 - [ ] Handles server connection errors gracefully
 - [ ] Supports configurable server paths
-
+#
 ### Step 1.3: Status Bar Integration
 **Duration**: 1 hour
 **Testing**: Status bar shows server status and allows control

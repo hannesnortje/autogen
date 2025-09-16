@@ -1,432 +1,399 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
+import { McpClient } from './mcpClient';
+import { SimpleWorkspaceConfiguration } from './services/simpleWorkspaceConfiguration';
+import { AutoGenStatusBar, registerStatusBarCommands } from './statusBar';
 import { ServerManager } from './services/server-manager';
-import { ServerStatusProvider } from './providers/server-status';
-import { ServerEventType } from './types/server';
+import { ServerEventType, ServerStatus } from './types/server';
 
-/**
- * AutoGen Agile Assistant Extension
- * Main extension entry point that initializes the AutoGen integration with server management
- */
-
+let mcpClient: McpClient;
+let statusBarItem: vscode.StatusBarItem;
+let autoGenStatusBar: AutoGenStatusBar;
 let outputChannel: vscode.OutputChannel;
+let workspaceConfig: SimpleWorkspaceConfiguration;
 let serverManager: ServerManager;
-let statusProvider: ServerStatusProvider;
-let dashboardPanel: vscode.WebviewPanel | undefined;
 
-/**
- * Extension activation function
- * Called when the extension is first activated
- */
-export function activate(context: vscode.ExtensionContext) {
-    console.log('AutoGen Agile Assistant is now active');
+// Track open dashboard panels
+const openDashboardPanels = new Map<string, vscode.WebviewPanel>();
 
-    // Create output channel for logging
-    outputChannel = vscode.window.createOutputChannel('AutoGen Agile');
-    outputChannel.appendLine('AutoGen Agile Assistant activated');
+export async function activate(context: vscode.ExtensionContext) {
+    outputChannel = vscode.window.createOutputChannel('AutoGen Extension');
+    outputChannel.appendLine('AutoGen Extension activating...');
 
-    // Initialize server manager
+    // Initialize MCP client
+    try {
+        mcpClient = new McpClient('http://localhost:9000');
+        outputChannel.appendLine('MCP Client initialized');
+    } catch (error) {
+        outputChannel.appendLine(`Failed to initialize MCP Client: ${error}`);
+        vscode.window.showErrorMessage(`AutoGen Extension: Failed to initialize MCP Client: ${error}`);
+    }
+
+    // Initialize workspace configuration
+    workspaceConfig = new SimpleWorkspaceConfiguration(outputChannel);
+
+    // Create status bar system
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.text = '$(server) AutoGen';
+    statusBarItem.tooltip = 'AutoGen MCP Server - Click to open dashboard';
+    statusBarItem.command = 'autogen.showDashboard';
+    statusBarItem.show();
+
+    // Initialize ServerManager (reads config from settings)
     serverManager = new ServerManager();
+    context.subscriptions.push({ dispose: () => serverManager.dispose() });
 
-    // Initialize status provider
-    statusProvider = new ServerStatusProvider(serverManager);
+    // Create advanced status bar with multiple items
+    autoGenStatusBar = new AutoGenStatusBar(context, mcpClient, serverManager);
 
-    // Add to disposables
-    context.subscriptions.push(serverManager, statusProvider);
+    // React to server events for UI
+    serverManager.on(ServerEventType.STATUS_CHANGED, () => autoGenStatusBar.refresh());
+    serverManager.on(ServerEventType.HEALTH_CHECK, () => autoGenStatusBar.refresh());
+    serverManager.on(ServerEventType.CONNECTION_ESTABLISHED, () => autoGenStatusBar.refresh());
+    serverManager.on(ServerEventType.CONNECTION_LOST, () => autoGenStatusBar.refresh());
 
-    // Register commands
-    registerCommands(context);
+    outputChannel.appendLine('Status bar items created and shown');
 
-    // Initialize extension state
-    initializeExtension(context);
+    // Initialize all workspace configurations
+    await workspaceConfig.initializeWorkspaces();
 
-    // Show welcome message for first activation
-    showWelcomeMessage(context);
+    // Register status bar commands
+    registerStatusBarCommands(context, mcpClient, autoGenStatusBar);
 
-    // Auto-connect if configured
-    autoConnectToServer();
-}
-
-/**
- * Extension deactivation function
- * Called when the extension is deactivated
- */
-export function deactivate() {
-    console.log('AutoGen Agile Assistant is now deactivated');
-
-    if (dashboardPanel) {
-        dashboardPanel.dispose();
-    }
-
-    if (outputChannel) {
-        outputChannel.dispose();
-    }
-}
-
-/**
- * Register all extension commands
- */
-function registerCommands(context: vscode.ExtensionContext) {
-    // Open Dashboard command
-    const openDashboardCommand = vscode.commands.registerCommand('autoGenAgile.openDashboard', () => {
-        createDashboardPanel(context);
-    });
-
-    // Refresh Sidebar command
-    const refreshSidebarCommand = vscode.commands.registerCommand('autoGenAgile.refreshSidebar', () => {
-        outputChannel.appendLine('Refreshing AutoGen Sidebar...');
-        vscode.window.showInformationMessage('AutoGen Sidebar refresh requested');
-    });
-
-    // Server management commands
-    const connectServerCommand = vscode.commands.registerCommand('autoGenAgile.connectServer', async () => {
-        try {
-            await serverManager.connect();
-            outputChannel.appendLine('Server connection initiated');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            outputChannel.appendLine(`Server connection failed: ${message}`);
-            vscode.window.showErrorMessage(`Failed to connect to AutoGen server: ${message}`);
-        }
-    });
-
-    const disconnectServerCommand = vscode.commands.registerCommand('autoGenAgile.disconnectServer', async () => {
-        try {
-            await serverManager.disconnect();
-            outputChannel.appendLine('Server disconnected');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            outputChannel.appendLine(`Server disconnect failed: ${message}`);
-        }
-    });
-
-    const startServerCommand = vscode.commands.registerCommand('autoGenAgile.startServer', async () => {
-        try {
-            await serverManager.startServer();
-            outputChannel.appendLine('Server start initiated');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            outputChannel.appendLine(`Server start failed: ${message}`);
-            vscode.window.showErrorMessage(`Failed to start AutoGen server: ${message}`);
-        }
-    });
-
-    const stopServerCommand = vscode.commands.registerCommand('autoGenAgile.stopServer', async () => {
-        try {
-            await serverManager.stopServer();
-            outputChannel.appendLine('Server stop initiated');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            outputChannel.appendLine(`Server stop failed: ${message}`);
-            vscode.window.showErrorMessage(`Failed to stop AutoGen server: ${message}`);
-        }
-    });
-
-    const showServerStatusCommand = vscode.commands.registerCommand('autogen.showServerStatus', () => {
-        createDashboardPanel(context);
-    });
-
+        // Register commands
     context.subscriptions.push(
-        openDashboardCommand,
-        refreshSidebarCommand,
-        connectServerCommand,
-        disconnectServerCommand,
-        startServerCommand,
-        stopServerCommand,
-        showServerStatusCommand
+    vscode.commands.registerCommand('autogen.connect', connectToServer),
+    vscode.commands.registerCommand('autogen.disconnect', disconnectFromServer),
+        vscode.commands.registerCommand('autogen.toggleConnection', toggleConnection),
+        vscode.commands.registerCommand('autogen.configureWorkspace', configureCurrentWorkspace),
+        vscode.commands.registerCommand('autogen.showDashboard', () => showDashboard(context)),
+        vscode.commands.registerCommand('autogen.startServer', startMcpServer),
+        statusBarItem,
+        outputChannel
     );
+
+    // Register status bar commands
+    registerStatusBarCommands(context, mcpClient, autoGenStatusBar);
+
+    // Listen for workspace changes to auto-configure new folders
+    vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
+        for (const folder of event.added) {
+            await workspaceConfig.configureWorkspace(folder.uri.fsPath);
+        }
+    });
+
+    outputChannel.appendLine('AutoGen Extension activated successfully');
 }
 
-/**
- * Create and show the dashboard panel
- */
-function createDashboardPanel(context: vscode.ExtensionContext) {
-    // If panel already exists, show it
-    if (dashboardPanel) {
-        dashboardPanel.reveal();
+async function connectToServer(): Promise<void> {
+    try {
+        outputChannel.appendLine('Connecting to AutoGen MCP server...');
+        const currentWorkspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+        if (currentWorkspace) {
+            const config = await workspaceConfig.getWorkspaceConfig(currentWorkspace);
+            if (config && config.autogen.serverPath) {
+                outputChannel.appendLine(`Found workspace config with server path: ${config.autogen.serverPath}`);
+            } else {
+                outputChannel.appendLine(`No workspace config found, using default AutoGen project path`);
+            }
+
+            // Connect via ServerManager (auto-start if configured)
+            await serverManager.connect();
+            statusBarItem.text = '$(check) AutoGen Connected';
+            statusBarItem.color = new vscode.ThemeColor('statusBarItem.prominentForeground');
+            autoGenStatusBar.refresh();
+            vscode.window.showInformationMessage('Connected to AutoGen MCP server');
+            return;
+        }
+
+        // If no workspace, still try to connect to the default server
+        outputChannel.appendLine(`No workspace folder, connecting to default AutoGen MCP server`);
+        await serverManager.connect();
+        statusBarItem.text = '$(check) AutoGen Connected';
+        statusBarItem.color = new vscode.ThemeColor('statusBarItem.prominentForeground');
+        autoGenStatusBar.refresh();
+        vscode.window.showInformationMessage('Connected to AutoGen MCP server');
+
+    } catch (error) {
+        outputChannel.appendLine(`Connection failed: ${error}`);
+        statusBarItem.text = '$(x) AutoGen Error';
+        statusBarItem.color = new vscode.ThemeColor('errorForeground');
+        autoGenStatusBar.refresh();
+        vscode.window.showErrorMessage(`Failed to connect to AutoGen server: ${error}`);
+    }
+}
+
+async function disconnectFromServer(): Promise<void> {
+    try {
+        outputChannel.appendLine('Disconnecting from AutoGen MCP server...');
+        await serverManager.disconnect();
+        statusBarItem.text = '$(server) AutoGen';
+        statusBarItem.color = undefined;
+        autoGenStatusBar.refresh();
+        vscode.window.showInformationMessage('Disconnected from AutoGen MCP server');
+    } catch (error) {
+        outputChannel.appendLine(`Disconnection failed: ${error}`);
+        vscode.window.showErrorMessage(`Failed to disconnect: ${error}`);
+    }
+}
+
+async function toggleConnection(): Promise<void> {
+    if (statusBarItem.text.includes('Connected')) {
+        await disconnectFromServer();
+    } else {
+        await connectToServer();
+    }
+}
+
+async function configureCurrentWorkspace(): Promise<void> {
+    const currentWorkspace = vscode.workspace.workspaceFolders?.[0];
+    if (!currentWorkspace) {
+        vscode.window.showWarningMessage('No workspace folder is open');
         return;
     }
 
-    // Create new panel
-    dashboardPanel = vscode.window.createWebviewPanel(
-        'autoGenDashboard',
-        'AutoGen Dashboard',
-        vscode.ViewColumn.One,
-        {
-            enableScripts: true,
-            retainContextWhenHidden: true,
-            localResourceRoots: [
-                vscode.Uri.file(path.join(context.extensionPath, 'out', 'webview'))
-            ]
-        }
-    );
-
-    // Set initial HTML content
-    dashboardPanel.webview.html = getWebviewContent(dashboardPanel.webview, context.extensionPath);
-
-    // Handle panel disposal
-    dashboardPanel.onDidDispose(() => {
-        dashboardPanel = undefined;
-    });
-
-    // Handle messages from webview
-    dashboardPanel.webview.onDidReceiveMessage(
-        async (message) => {
-            switch (message.type) {
-                case 'getServerStatus':
-                    sendServerStatusToWebview();
-                    break;
-
-                case 'executeServerAction':
-                    await handleServerAction(message.actionId);
-                    break;
-
-                case 'refreshServerStatus':
-                    await statusProvider.refresh();
-                    sendServerStatusToWebview();
-                    break;
-
-                case 'openSettings':
-                    vscode.commands.executeCommand('workbench.action.openSettings', 'autogen.server');
-                    break;
-
-                case 'viewLogs':
-                    outputChannel.show();
-                    break;
-
-                default:
-                    outputChannel.appendLine(`Unknown message type: ${message.type}`);
-            }
-        },
-        undefined,
-        context.subscriptions
-    );
-
-    // Send initial server status
-    sendServerStatusToWebview();
-
-    // Listen for server status changes
-    const statusSubscription = statusProvider.onDidChangeServerStatus((status) => {
-        if (dashboardPanel) {
-            dashboardPanel.webview.postMessage({
-                type: 'serverStatusUpdate',
-                status
-            });
-        }
-    });
-
-    context.subscriptions.push(statusSubscription);
-
-    outputChannel.appendLine('Dashboard panel created');
-}
-
-/**
- * Handle server actions from webview
- */
-async function handleServerAction(actionId: string): Promise<void> {
-    let success = true;
-    let error: string | undefined;
-
     try {
-        switch (actionId) {
-            case 'connect':
-                await serverManager.connect();
-                outputChannel.appendLine('Server connection initiated from dashboard');
-                break;
-
-            case 'disconnect':
-                await serverManager.disconnect();
-                outputChannel.appendLine('Server disconnected from dashboard');
-                break;
-
-            case 'start':
-                await serverManager.startServer();
-                outputChannel.appendLine('Server start initiated from dashboard');
-                break;
-
-            case 'stop':
-                await serverManager.stopServer();
-                outputChannel.appendLine('Server stop initiated from dashboard');
-                break;
-
-            case 'restart':
-                await serverManager.restart();
-                outputChannel.appendLine('Server restart initiated from dashboard');
-                break;
-
-            case 'refresh':
-                await statusProvider.refresh();
-                outputChannel.appendLine('Server status refreshed from dashboard');
-                break;
-
-            case 'configure':
-                vscode.commands.executeCommand('workbench.action.openSettings', 'autogen.server');
-                break;
-
-            default:
-                throw new Error(`Unknown server action: ${actionId}`);
-        }
-    } catch (err) {
-        success = false;
-        error = err instanceof Error ? err.message : String(err);
-        outputChannel.appendLine(`Server action '${actionId}' failed: ${error}`);
-    }
-
-    // Send result back to webview
-    if (dashboardPanel) {
-        dashboardPanel.webview.postMessage({
-            type: 'serverActionResult',
-            actionId,
-            success,
-            error
-        });
+        await workspaceConfig.configureWorkspace(currentWorkspace.uri.fsPath);
+        vscode.window.showInformationMessage(`AutoGen workspace configured: ${currentWorkspace.name}`);
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to configure workspace: ${error}`);
     }
 }
 
-/**
- * Send current server status to webview
- */
-function sendServerStatusToWebview() {
-    if (dashboardPanel) {
-        const status = statusProvider.getStatus();
-        dashboardPanel.webview.postMessage({
-            type: 'serverStatusUpdate',
-            status
-        });
+async function showDashboard(context: vscode.ExtensionContext) {
+    try {
+        // Create and show Lit 3 dashboard webview
+        const panel = vscode.window.createWebviewPanel(
+            'autogenDashboard',
+            'AutoGen Dashboard',
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [
+                    vscode.Uri.file(context.extensionPath)
+                ]
+            }
+        );
+
+        // Get dashboard data
+        const dashboardData = await getDashboardData();
+        panel.webview.html = getLit3DashboardHtml(panel, context, dashboardData);
+
+        // Handle messages from the webview
+        panel.webview.onDidReceiveMessage(
+            async message => {
+                console.log('Extension received message:', message);
+                switch (message.command) {
+                    case 'getSystemStatus':
+                        console.log('Handling getSystemStatus request');
+                        // Send current system status back to the dashboard
+                        const currentData = await getDashboardData();
+                        const statusData = {
+                            mcpConnected: currentData.serverStatus?.connected || false,
+                            agentCount: currentData.statistics?.activeAgents || 0,
+                            memoryUsage: Math.floor(Math.random() * 60) + 20, // Mock data
+                            lastUpdate: new Date().toLocaleString(),
+                            serverVersion: '1.0.0',
+                            uptime: '2h 15m',
+                            connectionLatency: 45,
+                            activeSessionsCount: 2,
+                            totalMemoryEntries: 1247,
+                            memoryTiers: {
+                                general: 856,
+                                project: 231,
+                                lessons: 160
+                            }
+                        };
+                        console.log('Sending status data back to dashboard:', statusData);
+                        panel.webview.postMessage({
+                            command: 'systemStatus',
+                            data: statusData
+                        });
+                        break;
+                    case 'startServer':
+                        await startMcpServer();
+                        break;
+                    case 'refreshDashboard':
+                        const newData = await getDashboardData();
+                        panel.webview.html = getLit3DashboardHtml(panel, context, newData);
+                        break;
+                    case 'openSettings':
+                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:hannesn.autogen-mcp');
+                        break;
+                    case 'viewLogs':
+                        await vscode.commands.executeCommand('workbench.action.toggleDevTools');
+                        break;
+                    case 'refreshAgents':
+                        // Handle agent refresh
+                        const agentData = await getDashboardData();
+                        panel.webview.postMessage({
+                            command: 'systemStatus',
+                            data: {
+                                mcpConnected: agentData.serverStatus?.connected || false,
+                                agentCount: agentData.statistics?.activeAgents || 0,
+                                memoryUsage: Math.floor(Math.random() * 60) + 20,
+                                lastUpdate: new Date().toLocaleString()
+                            }
+                        });
+                        break;
+                    case 'openDocumentation':
+                        await vscode.env.openExternal(vscode.Uri.parse('https://github.com/hannesnortje/autogen'));
+                        break;
+                    case 'openGithub':
+                        await vscode.env.openExternal(vscode.Uri.parse('https://github.com/hannesnortje/autogen'));
+                        break;
+                    case 'reportIssue':
+                        await vscode.env.openExternal(vscode.Uri.parse('https://github.com/hannesnortje/autogen/issues'));
+                        break;
+                }
+            },
+            undefined,
+            context.subscriptions
+        );
+
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to show dashboard: ${error}`);
     }
 }
 
-/**
- * Generate webview HTML content
- */
-function getWebviewContent(webview: vscode.Webview, extensionPath: string): string {
-    const scriptUri = webview.asWebviewUri(
-        vscode.Uri.file(path.join(extensionPath, 'out', 'webview', 'dashboard.js'))
+function getLit3DashboardHtml(panel: vscode.WebviewPanel, context: vscode.ExtensionContext, data: any): string {
+    // Get the bundled JavaScript file URI
+    const scriptUri = panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(context.extensionUri, 'out', 'webview', 'dashboard-bundle.js')
     );
 
-    const nonce = getNonce();
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${panel.webview.cspSource}; script-src ${panel.webview.cspSource};">
+            <title>AutoGen Dashboard</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: var(--vscode-font-family);
+                    background-color: var(--vscode-editor-background);
+                    color: var(--vscode-foreground);
+                }
+            </style>
+        </head>
+        <body>
+            <!-- Lit 3 Dashboard App Component -->
+            <dashboard-app
+                data-mcp-connected="${data.serverStatus?.connected || false}"
+                data-agent-count="${data.statistics?.activeAgents || 0}"
+                data-memory-usage="${Math.floor(Math.random() * 60) + 20}"
+                data-last-update="${new Date().toLocaleString()}">
+            </dashboard-app>
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-    <title>AutoGen Dashboard</title>
-    <style>
-        body {
-            padding: 0;
-            margin: 0;
-            font-family: var(--vscode-font-family);
-            font-size: var(--vscode-font-size);
-            color: var(--vscode-foreground);
-            background-color: var(--vscode-editor-background);
-        }
-
-        autogen-dashboard {
-            display: block;
-            width: 100%;
-            min-height: 100vh;
-        }
-    </style>
-</head>
-<body>
-    <autogen-dashboard id="dashboard"></autogen-dashboard>
-
-    <script nonce="${nonce}">
-        // Set up VS Code API
-        const vscode = acquireVsCodeApi();
-        window.vscode = vscode;
-
-        // Log to console for debugging
-        console.log('Dashboard webview loaded');
-    </script>
-
-    <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
-</body>
-</html>`;
+            <!-- Load the bundled Lit 3 components -->
+            <script src="${scriptUri}"></script>
+        </body>
+        </html>
+    `;
 }
 
-/**
- * Generate a nonce for CSP
- */
-function getNonce() {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
+async function getDashboardData() {
+    const serverStatus = await checkServerStatus();
+
+    return {
+        serverStatus: {
+            connected: serverStatus,
+            url: mcpClient.serverUrl,
+            lastChecked: new Date().toISOString()
+        },
+        statistics: {
+            activeSessions: 0, // Mock data - will be implemented later
+            totalSessions: 0, // Mock data - will be implemented later
+            activeAgents: serverStatus ? 3 : 0, // Mock data
+            totalConversations: 0, // Mock data - will be implemented later
+            totalMemories: 0 // Mock data - will be implemented later
+        },
+        workspace: {
+            name: vscode.workspace.name || 'Untitled Workspace',
+            folders: vscode.workspace.workspaceFolders?.length || 0
+        },
+        sessions: []
+    };
 }
 
-/**
- * Initialize extension with server management
- */
-function initializeExtension(context: vscode.ExtensionContext) {
-    // Set context for conditional view visibility
-    vscode.commands.executeCommand('setContext', 'workspaceHasAutoGenConfig', true);
-
-    // Log configuration
-    const config = vscode.workspace.getConfiguration('autogen.server');
-    const serverUrl = config.get<string>('url', 'http://localhost:9000');
-    const autoStart = config.get<boolean>('autoStart', true);
-    const healthCheckInterval = config.get<number>('healthCheckInterval', 30000);
-
-    outputChannel.appendLine(`Server configuration loaded:`);
-    outputChannel.appendLine(`  - Server URL: ${serverUrl}`);
-    outputChannel.appendLine(`  - Auto Start: ${autoStart}`);
-    outputChannel.appendLine(`  - Health Check Interval: ${healthCheckInterval}ms`);
-
-    // Listen for server events
-    serverManager.on(ServerEventType.STATUS_CHANGED, (event) => {
-        outputChannel.appendLine(`Server status changed: ${JSON.stringify(event.data)}`);
-    });
-
-    serverManager.on(ServerEventType.ERROR, (event) => {
-        outputChannel.appendLine(`Server error: ${JSON.stringify(event.data)}`);
-    });
-}
-
-/**
- * Auto-connect to server if configured
- */
-async function autoConnectToServer() {
-    const config = vscode.workspace.getConfiguration('autogen.server');
-    const autoStart = config.get<boolean>('autoStart', true);
-
-    if (autoStart) {
-        try {
-            outputChannel.appendLine('Auto-connecting to AutoGen server...');
-            await serverManager.connect();
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            outputChannel.appendLine(`Auto-connect failed: ${message}`);
-        }
+async function checkServerStatus(): Promise<boolean> {
+    try {
+        // Use ServerManager health check
+    const result = await serverManager.healthCheck();
+    return result.status === 'healthy';
+    } catch (error) {
+        console.log('Server health check failed:', error);
+        return false;
     }
 }
 
-/**
- * Show welcome message for new users
- */
-function showWelcomeMessage(context: vscode.ExtensionContext) {
-    const hasShownWelcome = context.globalState.get('hasShownWelcome', false);
+async function startMcpServer(): Promise<void> {
+    try {
+        outputChannel.appendLine('Starting AutoGen MCP Server...');
+        vscode.window.showInformationMessage('Starting AutoGen MCP Server...');
 
-    if (!hasShownWelcome) {
-        vscode.window.showInformationMessage(
-            'Welcome to AutoGen Agile Assistant! 🚀',
-            'Open Dashboard',
-            'Learn More'
-        ).then((selection: string | undefined) => {
-            switch (selection) {
-                case 'Open Dashboard':
-                    vscode.commands.executeCommand('autoGenAgile.openDashboard');
-                    break;
-                case 'Learn More':
-                    vscode.env.openExternal(vscode.Uri.parse('https://github.com/hannesnortje/autogen'));
-                    break;
-            }
+        // Update status bar
+        statusBarItem.text = "$(loading~spin) AutoGen";
+        statusBarItem.tooltip = "Starting AutoGen MCP Server...";
+
+    // Delegate to ServerManager which reads settings and uses Poetry
+    outputChannel.appendLine('Delegating server start to ServerManager...');
+
+        // Show progress
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Starting AutoGen MCP Server",
+            cancellable: false
+        }, async (progress) => {
+            progress.report({ increment: 0, message: "Initializing..." });
+
+            progress.report({ increment: 50, message: "Starting server process..." });
+            await serverManager.startServer();
+
+            // Wait a bit for server to start
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            progress.report({ increment: 100, message: "Server started!" });
         });
 
-        context.globalState.update('hasShownWelcome', true);
+        // Check if server is responsive
+        setTimeout(async () => {
+            const isHealthy = await checkServerStatus();
+            if (isHealthy) {
+                statusBarItem.text = "$(check) AutoGen";
+                statusBarItem.tooltip = "AutoGen MCP Server is running (click for dashboard)";
+                autoGenStatusBar.refresh(); // Update the advanced status bar
+                vscode.window.showInformationMessage('✅ AutoGen MCP Server is running and healthy!');
+                outputChannel.appendLine('Server is healthy and running');
+            } else {
+                statusBarItem.text = "$(x) AutoGen";
+                statusBarItem.tooltip = "AutoGen MCP Server may have issues (click for dashboard)";
+                autoGenStatusBar.refresh(); // Update the advanced status bar
+                vscode.window.showWarningMessage('⚠️ AutoGen MCP Server started but may not be fully ready yet.');
+                outputChannel.appendLine('Server started but health check failed');
+            }
+        }, 5000);
+
+    } catch (error) {
+        console.error('Failed to start MCP server:', error);
+        outputChannel.appendLine(`Failed to start MCP server: ${error}`);
+        statusBarItem.text = "$(x) AutoGen";
+        statusBarItem.tooltip = "AutoGen MCP Server failed to start (click to retry)";
+        autoGenStatusBar.refresh(); // Update the advanced status bar
+        vscode.window.showErrorMessage(`Failed to start AutoGen MCP Server: ${error}`);
+    }
+}
+
+export function deactivate() {
+    console.log('AutoGen MCP extension is now deactivated');
+
+    // Dispose of status bar
+    if (autoGenStatusBar) {
+        autoGenStatusBar.dispose();
     }
 }
