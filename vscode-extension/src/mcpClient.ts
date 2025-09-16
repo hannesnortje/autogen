@@ -315,10 +315,10 @@ export class McpClient {
                     let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
                     try {
                         const errorBody = await response.json();
-                        if (errorBody.detail) {
-                            errorMessage = errorBody.detail;
-                        } else if (errorBody.message) {
-                            errorMessage = errorBody.message;
+                        if (errorBody && typeof errorBody === 'object' && 'detail' in errorBody && typeof (errorBody as any).detail === 'string') {
+                            errorMessage = (errorBody as any).detail;
+                        } else if (errorBody && typeof errorBody === 'object' && 'message' in errorBody && typeof (errorBody as any).message === 'string') {
+                            errorMessage = (errorBody as any).message;
                         }
                     } catch (e) {
                         // Use default error message if JSON parsing fails
@@ -350,7 +350,7 @@ export class McpClient {
                     });
                 }
 
-                return data;
+                return data as T;
             } catch (error) {
                 if (error instanceof McpServerError) {
                     lastError = error;
