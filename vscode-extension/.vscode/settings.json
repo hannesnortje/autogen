@@ -1,6 +1,0 @@
-{
-    "files.associations": {
-        "*.ts": "typescript"
-    },
-    "typescript.preferences.includePackageJsonAutoImports": "auto"
-}
