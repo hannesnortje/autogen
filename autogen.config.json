@@ -1,0 +1,21 @@
+{
+  "ui": {
+    "launch_mode": "never",
+    "theme": "system",
+    "window_geometry": {
+      "width": 1200,
+      "height": 800
+    },
+    "auto_connect_server": true,
+    "debug_mode": false
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "log_level": "info",
+    "enable_ui_endpoints": true,
+    "auto_open_browser": false
+  },
+  "integration_mode": "hybrid",
+  "project_root": "/media/hannesn/storage/Code"
+}
