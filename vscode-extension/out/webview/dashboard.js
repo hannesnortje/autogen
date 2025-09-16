@@ -450,7 +450,7 @@ var AutoGenDashboard = (function (exports) {
           🔄
         </button>
       ` : ''}
-      
+
       ${this.collapsible ? x `
         <button
           class="action-button"
@@ -580,18 +580,18 @@ var AutoGenDashboard = (function (exports) {
     --vscode-font-size: var(--vscode-font-size, 13px);
     --vscode-font-weight: var(--vscode-font-weight, normal);
     --vscode-editor-font-family: var(--vscode-editor-font-family, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace);
-    
+
     /* Colors - Background */
     --vscode-foreground: var(--vscode-foreground, #cccccc);
     --vscode-background: var(--vscode-background, #1e1e1e);
     --vscode-editor-background: var(--vscode-editor-background, #1e1e1e);
     --vscode-editor-foreground: var(--vscode-editor-foreground, #d4d4d4);
-    
+
     /* Colors - UI Elements */
     --vscode-titleBar-activeForeground: var(--vscode-titleBar-activeForeground, #cccccc);
     --vscode-titleBar-inactiveBackground: var(--vscode-titleBar-inactiveBackground, #3c3c3c);
     --vscode-descriptionForeground: var(--vscode-descriptionForeground, #cccccc99);
-    
+
     /* Colors - Buttons */
     --vscode-button-background: var(--vscode-button-background, #0e639c);
     --vscode-button-foreground: var(--vscode-button-foreground, #ffffff);
@@ -599,14 +599,14 @@ var AutoGenDashboard = (function (exports) {
     --vscode-button-secondaryBackground: var(--vscode-button-secondaryBackground, #5a5d5e);
     --vscode-button-secondaryForeground: var(--vscode-button-secondaryForeground, #ffffff);
     --vscode-button-secondaryHoverBackground: var(--vscode-button-secondaryHoverBackground, #666868);
-    
+
     /* Colors - Input */
     --vscode-input-background: var(--vscode-input-background, #3c3c3c);
     --vscode-input-foreground: var(--vscode-input-foreground, #cccccc);
     --vscode-input-border: var(--vscode-input-border, #3c3c3c);
     --vscode-input-placeholderForeground: var(--vscode-input-placeholderForeground, #cccccc80);
     --vscode-inputOption-activeBorder: var(--vscode-inputOption-activeBorder, #007acc);
-    
+
     /* Colors - Validation */
     --vscode-inputValidation-errorBackground: var(--vscode-inputValidation-errorBackground, #5a1d1d);
     --vscode-inputValidation-errorBorder: var(--vscode-inputValidation-errorBorder, #be1100);
@@ -614,19 +614,19 @@ var AutoGenDashboard = (function (exports) {
     --vscode-inputValidation-warningBackground: var(--vscode-inputValidation-warningBackground, #352a05);
     --vscode-inputValidation-warningBorder: var(--vscode-inputValidation-warningBorder, #cc6d00);
     --vscode-inputValidation-warningForeground: var(--vscode-inputValidation-warningForeground, #ffcc00);
-    
+
     /* Colors - Panel */
     --vscode-panel-background: var(--vscode-panel-background, #1e1e1e);
     --vscode-panel-border: var(--vscode-panel-border, #454545);
     --vscode-panelTitle-activeForeground: var(--vscode-panelTitle-activeForeground, #e7e7e7);
     --vscode-panelTitle-inactiveForeground: var(--vscode-panelTitle-inactiveForeground, #e7e7e799);
-    
+
     /* Colors - List & Tree */
     --vscode-list-activeSelectionBackground: var(--vscode-list-activeSelectionBackground, #094771);
     --vscode-list-activeSelectionForeground: var(--vscode-list-activeSelectionForeground, #ffffff);
     --vscode-list-hoverBackground: var(--vscode-list-hoverBackground, #2a2d2e);
     --vscode-list-focusBackground: var(--vscode-list-focusBackground, #062f4a);
-    
+
     /* Colors - Status */
     --vscode-errorForeground: var(--vscode-errorForeground, #f48771);
     --vscode-warningForeground: var(--vscode-warningForeground, #ffcc00);
@@ -634,15 +634,15 @@ var AutoGenDashboard = (function (exports) {
     --vscode-charts-red: var(--vscode-charts-red, #f48771);
     --vscode-charts-yellow: var(--vscode-charts-yellow, #ffcc00);
     --vscode-charts-blue: var(--vscode-charts-blue, #75beff);
-    
+
     /* Colors - Toolbar */
     --vscode-toolbar-hoverBackground: var(--vscode-toolbar-hoverBackground, #5a5d5e14);
     --vscode-toolbar-activeBackground: var(--vscode-toolbar-activeBackground, #5a5d5e28);
-    
+
     /* Colors - Badge */
     --vscode-badge-background: var(--vscode-badge-background, #4d4d4d);
     --vscode-badge-foreground: var(--vscode-badge-foreground, #ffffff);
-    
+
     /* Colors - Progress */
     --vscode-progressBar-background: var(--vscode-progressBar-background, #0e639c);
   }
@@ -1347,32 +1347,145 @@ var AutoGenDashboard = (function (exports) {
     /**
      * AutoGen Dashboard Component
      * Main dashboard interface built with Lit 3 - extends BasePanel
+     * Now includes comprehensive server connection status and controls
      */
     exports.AutoGenDashboard = class AutoGenDashboard extends BasePanel {
-        static { this.styles = i$3 `
-    ${sharedStyles}
-
-    .status {
+        static get styles() {
+            return [super.styles, sharedStyles, i$3 `
+    .server-status {
+      background-color: var(--vscode-input-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 16px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .status-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-grow: 1;
     }
 
     .status-indicator {
-      width: 12px;
-      height: 12px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      background-color: var(--vscode-charts-red);
+      flex-shrink: 0;
+      position: relative;
     }
 
     .status-indicator.connected {
       background-color: var(--vscode-charts-green);
     }
 
-    .status-text {
-      font-size: 14px;
+    .status-indicator.connecting {
+      background-color: var(--vscode-charts-orange);
+      animation: pulse 1.5s infinite;
+    }
+
+    .status-indicator.error {
+      background-color: var(--vscode-charts-red);
+    }
+
+    .status-indicator.disconnected {
+      background-color: var(--vscode-descriptionForeground);
+      opacity: 0.5;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.1); }
+    }
+
+    .status-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .status-primary {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--vscode-titleBar-activeForeground);
+    }
+
+    .status-secondary {
+      font-size: 13px;
       opacity: 0.8;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .status-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--vscode-button-border);
+      background-color: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .action-btn:hover:not(:disabled) {
+      background-color: var(--vscode-button-secondaryHoverBackground);
+    }
+
+    .action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .action-btn.primary {
+      background-color: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+
+    .action-btn.primary:hover:not(:disabled) {
+      background-color: var(--vscode-button-hoverBackground);
+    }
+
+    .server-details {
+      background-color: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      padding: 16px;
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      font-size: 13px;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-label {
+      font-weight: 500;
+      color: var(--vscode-titleBar-activeForeground);
+    }
+
+    .detail-value {
+      color: var(--vscode-descriptionForeground);
+      font-family: var(--vscode-editor-font-family);
     }
 
     .dashboard-sections {
@@ -1404,94 +1517,297 @@ var AutoGenDashboard = (function (exports) {
       background-color: var(--vscode-editor-background);
     }
 
+    .placeholder.disabled {
+      opacity: 0.5;
+    }
+
     .actions {
       display: flex;
       gap: 12px;
       margin-top: 24px;
       flex-wrap: wrap;
     }
-  `; }
+
+    .connection-hint {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 8px;
+      font-style: italic;
+    }
+
+    .loading-text {
+      opacity: 0.7;
+      font-style: italic;
+    }
+    `];
+        }
         constructor() {
             super();
             this.projectName = 'AutoGen Agile Project';
-            this.connected = false;
+            this.serverStatus = null;
+            this._executingAction = null;
             this.title = 'AutoGen Dashboard';
             this.subtitle = 'Multi-agent workflow management';
             this.refreshable = true;
+            // Listen for messages from extension
+            window.addEventListener('message', this._handleExtensionMessage.bind(this));
         }
         renderContent() {
+            const isConnected = this.serverStatus?.status === 'connected' && this.serverStatus.isHealthy;
+            const isConnecting = this.serverStatus?.status === 'connecting' || this.serverStatus?.status === 'starting';
             return x `
-      <div class="status">
-        <div class="status-indicator \${this.connected ? 'connected' : ''}"></div>
-        <span class="status-text">
-          \${this.connected ? 'Connected to AutoGen MCP' : 'Disconnected from MCP Server'}
-        </span>
-      </div>
+      ${this._renderServerStatus()}
+      ${this.serverStatus?.connection ? this._renderServerDetails() : ''}
 
       <div class="dashboard-sections">
         <div class="section">
           <h3 class="section-title">Active Sessions</h3>
-          <div class="placeholder">
-            No active AutoGen sessions
+          <div class="placeholder ${!isConnected ? 'disabled' : ''}">
+            ${!isConnected
+            ? 'Connect to AutoGen server to view sessions'
+            : 'No active AutoGen sessions'}
           </div>
         </div>
 
         <div class="section">
           <h3 class="section-title">Recent Activities</h3>
-          <div class="placeholder">
-            Recent agent interactions will appear here
+          <div class="placeholder ${!isConnected ? 'disabled' : ''}">
+            ${!isConnected
+            ? 'Server connection required'
+            : 'Recent agent interactions will appear here'}
           </div>
         </div>
 
         <div class="section">
           <h3 class="section-title">Project Memory</h3>
-          <div class="placeholder">
-            Persistent project context and memory
+          <div class="placeholder ${!isConnected ? 'disabled' : ''}">
+            ${!isConnected
+            ? 'Memory features require server connection'
+            : 'Persistent project context and memory'}
           </div>
         </div>
       </div>
 
       <div class="actions">
-        <button class="btn" @click="\${this._startNewSession}">
-          Start New Session
+        <button
+          class="btn primary"
+          ?disabled=${!isConnected || isConnecting}
+          @click="${this._startNewSession}"
+        >
+          ${isConnecting ? 'Starting...' : 'Start New Session'}
         </button>
-        <button class="btn secondary" @click="\${this._connectToMcp}">
-          \${this.connected ? 'Reconnect' : 'Connect to MCP'}
-        </button>
-        <button class="btn secondary" @click="\${this._openSettings}">
+
+        <button class="btn secondary" @click="${this._openSettings}">
           Settings
         </button>
+
+        <button class="btn secondary" @click="${this._viewLogs}">
+          View Logs
+        </button>
+      </div>
+
+      ${!isConnected ? x `
+        <div class="connection-hint">
+          💡 Tip: Ensure AutoGen MCP server is running and accessible at the configured URL.
+        </div>
+      ` : ''}
+    `;
+        }
+        _renderServerStatus() {
+            if (!this.serverStatus) {
+                return x `
+        <div class="server-status">
+          <div class="status-main">
+            <div class="status-indicator disconnected"></div>
+            <div class="status-info">
+              <div class="status-primary loading-text">Loading server status...</div>
+            </div>
+          </div>
+        </div>
+      `;
+            }
+            const statusClass = this._getStatusClass(this.serverStatus.status);
+            return x `
+      <div class="server-status">
+        <div class="status-main">
+          <div class="status-indicator ${statusClass}"></div>
+          <div class="status-info">
+            <div class="status-primary">${this.serverStatus.statusText}</div>
+            <div class="status-secondary">
+              ${this.serverStatus.connection?.url || 'No connection configured'}
+            </div>
+          </div>
+        </div>
+
+        <div class="status-actions">
+          ${this.serverStatus?.availableActions?.map((action) => x `
+            <button
+              class="action-btn ${action.id === 'connect' || action.id === 'start' ? 'primary' : ''}"
+              ?disabled=${!action.enabled || this._executingAction === action.id}
+              title="${action.tooltip || action.label}"
+              @click="${() => this._executeServerAction(action.id)}"
+            >
+              ${this._executingAction === action.id
+            ? '⏳ Working...'
+            : action.label}
+            </button>
+          `) || x `<div style="color: red;">Actions not rendered - length: ${this.serverStatus?.availableActions?.length}</div>`}
+        </div>
       </div>
     `;
         }
+        _renderServerDetails() {
+            if (!this.serverStatus?.connection)
+                return '';
+            const connection = this.serverStatus.connection;
+            const metrics = this.serverStatus.metrics;
+            return x `
+      <div class="server-details">
+        <div class="detail-item">
+          <div class="detail-label">Server URL</div>
+          <div class="detail-value">${connection.url}</div>
+        </div>
+
+        <div class="detail-item">
+          <div class="detail-label">Server Type</div>
+          <div class="detail-value">${connection.config.type}</div>
+        </div>
+
+        ${connection.connectedAt ? x `
+          <div class="detail-item">
+            <div class="detail-label">Connected Since</div>
+            <div class="detail-value">${this._formatDateTime(connection.connectedAt)}</div>
+          </div>
+        ` : ''}
+
+        ${connection.lastHealthCheck ? x `
+          <div class="detail-item">
+            <div class="detail-label">Last Health Check</div>
+            <div class="detail-value">${this._formatDateTime(connection.lastHealthCheck)}</div>
+          </div>
+        ` : ''}
+
+        ${metrics ? x `
+          <div class="detail-item">
+            <div class="detail-label">Health Checks</div>
+            <div class="detail-value">${metrics.healthChecks} (${metrics.failedHealthChecks} failed)</div>
+          </div>
+
+          <div class="detail-item">
+            <div class="detail-label">Avg Response Time</div>
+            <div class="detail-value">${Math.round(metrics.averageResponseTime)}ms</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+        }
+        _getStatusClass(status) {
+            switch (status) {
+                case 'connected': return 'connected';
+                case 'connecting':
+                case 'reconnecting':
+                case 'starting': return 'connecting';
+                case 'error': return 'error';
+                default: return 'disconnected';
+            }
+        }
+        _formatDateTime(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            if (diffMins < 1) {
+                return 'Just now';
+            }
+            else if (diffMins < 60) {
+                return `${diffMins}m ago`;
+            }
+            else if (diffMins < 1440) {
+                return `${Math.floor(diffMins / 60)}h ago`;
+            }
+            else {
+                return date.toLocaleDateString();
+            }
+        }
+        async _executeServerAction(actionId) {
+            if (this._executingAction)
+                return;
+            this._executingAction = actionId;
+            try {
+                // Send message to extension to execute server action
+                this._sendMessage('executeServerAction', { actionId });
+                // Reset executing state after a short delay to show feedback
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            catch (error) {
+                console.error(`Failed to execute server action ${actionId}:`, error);
+            }
+            finally {
+                this._executingAction = null;
+            }
+        }
         async onRefresh() {
-            // Override with actual refresh logic
-            await this.handleAsync(new Promise(resolve => setTimeout(resolve, 1000)), 'Failed to refresh dashboard');
+            // Request fresh server status from extension
+            this._sendMessage('refreshServerStatus');
+            // Show loading state briefly
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
         _startNewSession() {
             this.dispatchCustomEvent('start-session', {
                 projectName: this.projectName
             });
         }
-        _connectToMcp() {
-            this.dispatchCustomEvent('connect-mcp', {
-                connected: this.connected
-            });
-        }
         _openSettings() {
-            this.dispatchCustomEvent('open-settings');
+            this._sendMessage('openSettings');
+        }
+        _viewLogs() {
+            this._sendMessage('viewLogs');
+        }
+        _sendMessage(type, data = {}) {
+            // Send message to VS Code extension
+            if (window.vscode) {
+                window.vscode.postMessage({ type, ...data });
+            }
+        }
+        _handleExtensionMessage(event) {
+            const message = event.data;
+            switch (message.type) {
+                case 'serverStatusUpdate':
+                    this.serverStatus = message.status;
+                    this.requestUpdate();
+                    break;
+                case 'serverActionResult':
+                    if (message.success) {
+                        // Action completed successfully
+                        this._executingAction = null;
+                    }
+                    else {
+                        // Action failed
+                        console.error('Server action failed:', message.error);
+                        this._executingAction = null;
+                    }
+                    break;
+            }
         }
         connectedCallback() {
             super.connectedCallback();
-            console.log('AutoGen Dashboard connected to DOM');
+            // Request initial server status from extension
+            this._sendMessage('getServerStatus');
+        }
+        disconnectedCallback() {
+            super.disconnectedCallback();
+            window.removeEventListener('message', this._handleExtensionMessage.bind(this));
         }
     };
     __decorate([
         n({ type: String })
     ], exports.AutoGenDashboard.prototype, "projectName", void 0);
     __decorate([
-        n({ type: Boolean })
-    ], exports.AutoGenDashboard.prototype, "connected", void 0);
+        n({ type: Object })
+    ], exports.AutoGenDashboard.prototype, "serverStatus", void 0);
+    __decorate([
+        r()
+    ], exports.AutoGenDashboard.prototype, "_executingAction", void 0);
     __decorate([
         themeProperty()
     ], exports.AutoGenDashboard.prototype, "theme", void 0);
