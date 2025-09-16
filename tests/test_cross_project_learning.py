@@ -419,16 +419,18 @@ class TestCrossProjectLearningService:
     def test_register_project(self):
         """Test registering a new project for cross-project learning"""
         # Mock the pattern detection and metrics computation
-        with patch.object(
-            self.service,
-            "_detect_patterns_in_project",
-            return_value=["mvc", "repository"],
-        ), patch.object(
-            self.service,
-            "_compute_project_metrics",
-            return_value={"overall_success": 0.8, "build_success_rate": 0.85},
+        with (
+            patch.object(
+                self.service,
+                "_detect_patterns_in_project",
+                return_value=["mvc", "repository"],
+            ),
+            patch.object(
+                self.service,
+                "_compute_project_metrics",
+                return_value={"overall_success": 0.8, "build_success_rate": 0.85},
+            ),
         ):
-
             project_profile = self.service.register_project(
                 project_id="test-register",
                 name="Test Registration Project",
@@ -457,14 +459,16 @@ class TestCrossProjectLearningService:
     def test_get_project_recommendations_with_registered_projects(self):
         """Test getting recommendations with registered projects"""
         # Register multiple projects first
-        with patch.object(
-            self.service, "_detect_patterns_in_project", return_value=["mvc"]
-        ), patch.object(
-            self.service,
-            "_compute_project_metrics",
-            return_value={"overall_success": 0.8},
+        with (
+            patch.object(
+                self.service, "_detect_patterns_in_project", return_value=["mvc"]
+            ),
+            patch.object(
+                self.service,
+                "_compute_project_metrics",
+                return_value={"overall_success": 0.8},
+            ),
         ):
-
             # Register target project
             self.service.register_project(
                 project_id="target",
@@ -510,16 +514,18 @@ class TestCrossProjectLearningService:
     def test_analyze_cross_project_patterns_with_projects(self):
         """Test cross-project analysis with registered projects"""
         # Register test projects
-        with patch.object(
-            self.service,
-            "_detect_patterns_in_project",
-            return_value=["mvc", "repository"],
-        ), patch.object(
-            self.service,
-            "_compute_project_metrics",
-            return_value={"overall_success": 0.85, "build_success_rate": 0.90},
+        with (
+            patch.object(
+                self.service,
+                "_detect_patterns_in_project",
+                return_value=["mvc", "repository"],
+            ),
+            patch.object(
+                self.service,
+                "_compute_project_metrics",
+                return_value={"overall_success": 0.85, "build_success_rate": 0.90},
+            ),
         ):
-
             self.service.register_project(
                 project_id="analyze-1",
                 name="Analysis Project 1",
@@ -644,12 +650,10 @@ class TestCrossProjectLearningIntegration:
         service = CrossProjectLearningService(mock_memory, mock_artifact)
 
         # Mock pattern detection and metrics
-        with patch.object(
-            service, "_detect_patterns_in_project"
-        ) as mock_patterns, patch.object(
-            service, "_compute_project_metrics"
-        ) as mock_metrics:
-
+        with (
+            patch.object(service, "_detect_patterns_in_project") as mock_patterns,
+            patch.object(service, "_compute_project_metrics") as mock_metrics,
+        ):
             mock_patterns.return_value = ["mvc", "repository", "singleton"]
             mock_metrics.return_value = {
                 "overall_success": 0.9,

@@ -39,11 +39,14 @@ const vscode = __importStar(require("vscode"));
 const mcpClient_1 = require("./mcpClient");
 const simpleWorkspaceConfiguration_1 = require("./services/simpleWorkspaceConfiguration");
 const statusBar_1 = require("./statusBar");
+const server_manager_1 = require("./services/server-manager");
+const server_1 = require("./types/server");
 let mcpClient;
 let statusBarItem;
 let autoGenStatusBar;
 let outputChannel;
 let workspaceConfig;
+let serverManager;
 // Track open dashboard panels
 const openDashboardPanels = new Map();
 async function activate(context) {
@@ -66,8 +69,16 @@ async function activate(context) {
     statusBarItem.tooltip = 'AutoGen MCP Server - Click to open dashboard';
     statusBarItem.command = 'autogen.showDashboard';
     statusBarItem.show();
+    // Initialize ServerManager (reads config from settings)
+    serverManager = new server_manager_1.ServerManager();
+    context.subscriptions.push({ dispose: () => serverManager.dispose() });
     // Create advanced status bar with multiple items
-    autoGenStatusBar = new statusBar_1.AutoGenStatusBar(context, mcpClient);
+    autoGenStatusBar = new statusBar_1.AutoGenStatusBar(context, mcpClient, serverManager);
+    // React to server events for UI
+    serverManager.on(server_1.ServerEventType.STATUS_CHANGED, () => autoGenStatusBar.refresh());
+    serverManager.on(server_1.ServerEventType.HEALTH_CHECK, () => autoGenStatusBar.refresh());
+    serverManager.on(server_1.ServerEventType.CONNECTION_ESTABLISHED, () => autoGenStatusBar.refresh());
+    serverManager.on(server_1.ServerEventType.CONNECTION_LOST, () => autoGenStatusBar.refresh());
     outputChannel.appendLine('Status bar items created and shown');
     // Initialize all workspace configurations
     await workspaceConfig.initializeWorkspaces();
@@ -97,37 +108,37 @@ async function connectToServer() {
             else {
                 outputChannel.appendLine(`No workspace config found, using default AutoGen project path`);
             }
-            // Always connect to the standard MCP server regardless of workspace
-            outputChannel.appendLine(`Connecting to AutoGen MCP server at http://localhost:9000`);
-            // Here you would connect using the MCP client
+            // Connect via ServerManager (auto-start if configured)
+            await serverManager.connect();
             statusBarItem.text = '$(check) AutoGen Connected';
             statusBarItem.color = new vscode.ThemeColor('statusBarItem.prominentForeground');
-            autoGenStatusBar.refresh(); // Update the advanced status bar
+            autoGenStatusBar.refresh();
             vscode.window.showInformationMessage('Connected to AutoGen MCP server');
             return;
         }
         // If no workspace, still try to connect to the default server
         outputChannel.appendLine(`No workspace folder, connecting to default AutoGen MCP server`);
+        await serverManager.connect();
         statusBarItem.text = '$(check) AutoGen Connected';
         statusBarItem.color = new vscode.ThemeColor('statusBarItem.prominentForeground');
-        autoGenStatusBar.refresh(); // Update the advanced status bar
+        autoGenStatusBar.refresh();
         vscode.window.showInformationMessage('Connected to AutoGen MCP server');
     }
     catch (error) {
         outputChannel.appendLine(`Connection failed: ${error}`);
         statusBarItem.text = '$(x) AutoGen Error';
         statusBarItem.color = new vscode.ThemeColor('errorForeground');
-        autoGenStatusBar.refresh(); // Update the advanced status bar
+        autoGenStatusBar.refresh();
         vscode.window.showErrorMessage(`Failed to connect to AutoGen server: ${error}`);
     }
 }
 async function disconnectFromServer() {
     try {
         outputChannel.appendLine('Disconnecting from AutoGen MCP server...');
-        // Here you would disconnect from the server
+        await serverManager.disconnect();
         statusBarItem.text = '$(server) AutoGen';
         statusBarItem.color = undefined;
-        autoGenStatusBar.refresh(); // Update the advanced status bar
+        autoGenStatusBar.refresh();
         vscode.window.showInformationMessage('Disconnected from AutoGen MCP server');
     }
     catch (error) {
@@ -251,7 +262,7 @@ function getLit3DashboardHtml(panel, context, data) {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${panel.webview.cspSource}; script-src ${panel.webview.cspSource};">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${panel.webview.cspSource}; script-src 'unsafe-inline' 'unsafe-eval' ${panel.webview.cspSource}; connect-src 'none'; worker-src 'none';">
             <title>AutoGen Dashboard</title>
             <style>
                 body {
@@ -264,8 +275,29 @@ function getLit3DashboardHtml(panel, context, data) {
             </style>
         </head>
         <body>
+            <!-- Prevent service worker registration in webview -->
+            <script>
+                // Polyfill to prevent service worker registration errors
+                if (typeof navigator !== 'undefined' && !navigator.serviceWorker) {
+                    Object.defineProperty(navigator, 'serviceWorker', {
+                        value: undefined,
+                        writable: false
+                    });
+                }
+                
+                // Prevent any service worker registration attempts
+                if (typeof window !== 'undefined') {
+                    window.addEventListener('error', function(e) {
+                        if (e.message && e.message.includes('ServiceWorker')) {
+                            e.preventDefault();
+                            console.warn('Service Worker registration blocked in webview context');
+                        }
+                    });
+                }
+            </script>
+
             <!-- Lit 3 Dashboard App Component -->
-            <dashboard-app 
+            <dashboard-app
                 data-mcp-connected="${data.serverStatus?.connected || false}"
                 data-agent-count="${data.statistics?.activeAgents || 0}"
                 data-memory-usage="${Math.floor(Math.random() * 60) + 20}"
@@ -288,7 +320,7 @@ async function getDashboardData() {
         },
         statistics: {
             activeSessions: 0, // Mock data - will be implemented later
-            totalSessions: 0, // Mock data - will be implemented later  
+            totalSessions: 0, // Mock data - will be implemented later
             activeAgents: serverStatus ? 3 : 0, // Mock data
             totalConversations: 0, // Mock data - will be implemented later
             totalMemories: 0 // Mock data - will be implemented later
@@ -302,14 +334,9 @@ async function getDashboardData() {
 }
 async function checkServerStatus() {
     try {
-        // First check if server is available
-        const isAvailable = await mcpClient.isServerAvailable();
-        if (!isAvailable) {
-            return false;
-        }
-        // Then check health
-        const result = await mcpClient.getHealth();
-        return result.status === 'healthy' || result.status === 'ok';
+        // Use ServerManager health check
+        const result = await serverManager.healthCheck();
+        return result.status === 'healthy';
     }
     catch (error) {
         console.log('Server health check failed:', error);
@@ -323,11 +350,8 @@ async function startMcpServer() {
         // Update status bar
         statusBarItem.text = "$(loading~spin) AutoGen";
         statusBarItem.tooltip = "Starting AutoGen MCP Server...";
-        // Always use the hardcoded AutoGen project directory (not workspace dependent)
-        const autoGenProjectPath = '/media/hannesn/storage/Code/autogen';
-        const serverCommand = 'poetry run python -m src.autogen_mcp.mcp_server --port 9000';
-        outputChannel.appendLine(`Using AutoGen project path: ${autoGenProjectPath}`);
-        outputChannel.appendLine(`Server command: ${serverCommand}`);
+        // Delegate to ServerManager which reads settings and uses Poetry
+        outputChannel.appendLine('Delegating server start to ServerManager...');
         // Show progress
         await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
@@ -335,14 +359,8 @@ async function startMcpServer() {
             cancellable: false
         }, async (progress) => {
             progress.report({ increment: 0, message: "Initializing..." });
-            // Create a terminal to run the server from the AutoGen project directory
-            const terminal = vscode.window.createTerminal({
-                name: 'AutoGen MCP Server',
-                cwd: autoGenProjectPath
-            });
             progress.report({ increment: 50, message: "Starting server process..." });
-            terminal.sendText(serverCommand);
-            terminal.show();
+            await serverManager.startServer();
             // Wait a bit for server to start
             await new Promise(resolve => setTimeout(resolve, 3000));
             progress.report({ increment: 100, message: "Server started!" });

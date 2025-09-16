@@ -208,3 +208,9 @@ vscode-extension/*.vsix
 /package-lock.json
 /tsconfig.json
 /USER_GUIDE.md
+
+# Prevent temporary development files
+debug_*.py
+quick_*.py
+test_*_integration.py
+*CONTINUATION*.md

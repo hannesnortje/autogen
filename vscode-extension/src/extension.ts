@@ -269,7 +269,7 @@ function getLit3DashboardHtml(panel: vscode.WebviewPanel, context: vscode.Extens
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${panel.webview.cspSource}; script-src ${panel.webview.cspSource};">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${panel.webview.cspSource}; script-src 'unsafe-inline' 'unsafe-eval' ${panel.webview.cspSource}; connect-src 'none'; worker-src 'none';">
             <title>AutoGen Dashboard</title>
             <style>
                 body {
@@ -282,6 +282,27 @@ function getLit3DashboardHtml(panel: vscode.WebviewPanel, context: vscode.Extens
             </style>
         </head>
         <body>
+            <!-- Prevent service worker registration in webview -->
+            <script>
+                // Polyfill to prevent service worker registration errors
+                if (typeof navigator !== 'undefined' && !navigator.serviceWorker) {
+                    Object.defineProperty(navigator, 'serviceWorker', {
+                        value: undefined,
+                        writable: false
+                    });
+                }
+
+                // Prevent any service worker registration attempts
+                if (typeof window !== 'undefined') {
+                    window.addEventListener('error', function(e) {
+                        if (e.message && e.message.includes('ServiceWorker')) {
+                            e.preventDefault();
+                            console.warn('Service Worker registration blocked in webview context');
+                        }
+                    });
+                }
+            </script>
+
             <!-- Lit 3 Dashboard App Component -->
             <dashboard-app
                 data-mcp-connected="${data.serverStatus?.connected || false}"
