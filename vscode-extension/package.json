@@ -1,0 +1,117 @@
+{
+  "name": "autogen-agile-assistant",
+  "displayName": "AutoGen Agile Assistant",
+  "description": "AutoGen-powered agile project management assistant for VS Code",
+  "version": "0.1.0",
+  "publisher": "hannesn",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hannesnortje/autogen"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Notebooks"
+  ],
+  "keywords": [
+    "autogen",
+    "ai",
+    "agile",
+    "project management",
+    "multi-agent",
+    "collaboration"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "autoGenAgile.openDashboard",
+        "title": "Open AutoGen Dashboard",
+        "category": "AutoGen"
+      },
+      {
+        "command": "autoGenAgile.refreshSidebar",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "autoGenSidebar",
+          "name": "AutoGen Agile",
+          "when": "workspaceHasAutoGenConfig",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "autogen-agile",
+          "title": "AutoGen Agile",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AutoGen Agile Assistant",
+      "properties": {
+        "autoGenAgile.mcpServerUrl": {
+          "type": "string",
+          "default": "ws://localhost:9000",
+          "description": "AutoGen MCP Server WebSocket URL"
+        },
+        "autoGenAgile.enableAutoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic refresh of project data"
+        },
+        "autoGenAgile.refreshInterval": {
+          "type": "number",
+          "default": 30000,
+          "description": "Refresh interval in milliseconds"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "build:webview": "rollup -c",
+    "watch:webview": "rollup -c -w"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "20.x",
+    "@types/ws": "^8.5.10",
+    "@eslint/js": "^9.9.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.9.0",
+    "typescript": "^5.5.4",
+    "rollup": "^4.21.0",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "tslib": "^2.6.3"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "lit": "^3.2.0"
+  }
+}
