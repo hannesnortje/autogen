@@ -67,6 +67,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('autogen.configureWorkspace', configureCurrentWorkspace),
         vscode.commands.registerCommand('autogen.showDashboard', () => showDashboard(context)),
         vscode.commands.registerCommand('autogen.startServer', startMcpServer),
+        vscode.commands.registerCommand('autogen.stopServer', stopMcpServer),
         statusBarItem,
         outputChannel
     );
@@ -212,7 +213,12 @@ async function showDashboard(context: vscode.ExtensionContext) {
                         });
                         break;
                     case 'startServer':
+                    case 'startMcpServer':
                         await startMcpServer();
+                        break;
+                    case 'stopServer':
+                    case 'stopMcpServer':
+                        await stopMcpServer();
                         break;
                     case 'refreshDashboard':
                         const newData = await getDashboardData();
@@ -386,6 +392,52 @@ async function startMcpServer(): Promise<void> {
         statusBarItem.tooltip = "AutoGen MCP Server failed to start (click to retry)";
         autoGenStatusBar.refresh(); // Update the advanced status bar
         vscode.window.showErrorMessage(`Failed to start AutoGen MCP Server: ${error}`);
+    }
+}
+
+async function stopMcpServer(): Promise<void> {
+    try {
+        outputChannel.appendLine('Stopping AutoGen MCP Server...');
+        vscode.window.showInformationMessage('Stopping AutoGen MCP Server...');
+
+        // Update status bar
+        statusBarItem.text = "$(loading~spin) AutoGen";
+        statusBarItem.tooltip = "Stopping AutoGen MCP Server...";
+
+        // Delegate to ServerManager
+        outputChannel.appendLine('Delegating server stop to ServerManager...');
+
+        // Show progress
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Stopping AutoGen MCP Server",
+            cancellable: false
+        }, async (progress) => {
+            progress.report({ increment: 0, message: "Shutting down..." });
+
+            progress.report({ increment: 50, message: "Stopping server process..." });
+            await serverManager.stopServer();
+
+            // Wait a bit for server to stop
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            progress.report({ increment: 100, message: "Server stopped!" });
+        });
+
+        // Update status
+        statusBarItem.text = "$(server) AutoGen";
+        statusBarItem.tooltip = "AutoGen MCP Server is stopped (click for dashboard)";
+        autoGenStatusBar.refresh();
+        vscode.window.showInformationMessage('✅ AutoGen MCP Server stopped successfully!');
+        outputChannel.appendLine('Server stopped successfully');
+
+    } catch (error) {
+        console.error('Failed to stop MCP server:', error);
+        outputChannel.appendLine(`Failed to stop MCP server: ${error}`);
+        statusBarItem.text = "$(x) AutoGen";
+        statusBarItem.tooltip = "AutoGen MCP Server stop failed (click for dashboard)";
+        autoGenStatusBar.refresh();
+        vscode.window.showErrorMessage(`Failed to stop AutoGen MCP Server: ${error}`);
     }
 }
 
