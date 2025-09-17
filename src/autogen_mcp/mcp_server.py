@@ -18,7 +18,7 @@ from fastapi import (
 from pydantic import BaseModel
 
 from autogen_mcp.multi_memory import MultiScopeMemoryService
-from autogen_mcp.collections import CollectionManager, MemoryScope
+from autogen_mcp.memory_collections import CollectionManager, MemoryScope
 from autogen_mcp.knowledge_seeder import KnowledgeSeeder
 from autogen_mcp.hybrid_search_service import HybridSearchService, HybridConfig
 from autogen_mcp.orchestrator import AgentOrchestrator

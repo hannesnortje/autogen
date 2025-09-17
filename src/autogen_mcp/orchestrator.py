@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from autogen_mcp.agents import create_agent
 from autogen_mcp.gemini_client import GeminiClient
 from autogen_mcp.simple_agent_memory import AgentMemoryService
-from autogen_mcp.collections import CollectionManager
+from autogen_mcp.memory_collections import CollectionManager
 from autogen_mcp.knowledge_management import (
     KnowledgeManagementService,
     KnowledgeManagementConfig,
@@ -151,9 +151,7 @@ class AgentOrchestrator:
                     )
 
                     if response.status_code == 200:
-                        print(
-                            f"[Orchestrator] {agent_name} created file: " f"{filename}"
-                        )
+                        print(f"[Orchestrator] {agent_name} created file: {filename}")
                     else:
                         print(
                             f"[Orchestrator] Failed to write {filename}: "
@@ -161,7 +159,7 @@ class AgentOrchestrator:
                         )
 
                 except Exception as e:
-                    print(f"[Orchestrator] Error writing file {filename}: " f"{str(e)}")
+                    print(f"[Orchestrator] Error writing file {filename}: {str(e)}")
 
             else:
                 print(

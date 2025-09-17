@@ -396,7 +396,7 @@ class CoderAgent(Agent):
         """Search Qdrant for matching component patterns across multiple frameworks."""
         try:
             from autogen_mcp.embeddings import EmbeddingService
-            from autogen_mcp.collections import MemoryScope
+            from autogen_mcp.memory_collections import MemoryScope
 
             # Detect framework/language from objective
             framework = self._detect_framework(objective)
