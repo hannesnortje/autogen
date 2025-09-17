@@ -206,9 +206,28 @@ class SessionConfigWidget(QWidget):
         self.session_name.setPlaceholderText("Enter session name...")
         basic_layout.addRow("Session Name:", self.session_name)
 
+        # Project name field
+        self.project_name = QLineEdit()
+        self.project_name.setPlaceholderText("Enter project name...")
+        basic_layout.addRow("Project Name:", self.project_name)
+
+        # Objective field
+        self.objective = QTextEdit()
+        self.objective.setPlaceholderText("Enter session objective...")
+        self.objective.setMaximumHeight(80)
+        basic_layout.addRow("Objective:", self.objective)
+
         self.session_type = QComboBox()
         self.session_type.addItems(
-            ["Chat", "Code Review", "Planning", "Research", "Custom"]
+            [
+                "Development",
+                "Code Review",
+                "Coding",
+                "Planning",
+                "Research",
+                "Chat",
+                "Custom",
+            ]
         )
         basic_layout.addRow("Session Type:", self.session_type)
 
@@ -334,6 +353,14 @@ class SessionConfigWidget(QWidget):
             QMessageBox.warning(self, "Warning", "Please enter a session name")
             return
 
+        if not self.project_name.text().strip():
+            QMessageBox.warning(self, "Warning", "Please enter a project name")
+            return
+
+        if not self.objective.toPlainText().strip():
+            QMessageBox.warning(self, "Warning", "Please enter a session objective")
+            return
+
         if not self.working_directory.text().strip():
             QMessageBox.warning(self, "Warning", "Please select a working directory")
             return
@@ -353,6 +380,8 @@ class SessionConfigWidget(QWidget):
     def reset_config(self):
         """Reset configuration"""
         self.session_name.clear()
+        self.project_name.clear()
+        self.objective.clear()
         self.session_type.setCurrentIndex(0)
         self.max_rounds.setValue(10)
         self.agents_list.clear()
@@ -368,6 +397,8 @@ class SessionConfigWidget(QWidget):
 
         return {
             "name": self.session_name.text().strip(),
+            "project": self.project_name.text().strip(),
+            "objective": self.objective.toPlainText().strip(),
             "type": self.session_type.currentText(),
             "max_rounds": self.max_rounds.value(),
             "agents": agents,
@@ -648,24 +679,27 @@ class SessionManagerWidget(QWidget):
         """Handle session start request from config widget"""
         try:
             # Extract session parameters
-            project_name = config.get("name", "Unnamed Project")
+            project_name = config.get("project", "Unnamed Project")
+            objective = config.get(
+                "objective", f"{config.get('type', 'Chat')} session for {project_name}"
+            )
             agents = config.get("agents", ["assistant"])
-            objective = f"{config.get('type', 'Chat')} session for {project_name}"
             working_directory = config.get("working_directory")
+            session_type = config.get("type", "Chat")
 
-            # For now, show the config that would be sent to the API
-            QMessageBox.information(
-                self,
-                "Session Configuration",
-                f"Project: {project_name}\n"
-                f"Agents: {', '.join(agents)}\n"
-                f"Objective: {objective}\n"
-                f"Working Directory: {working_directory or 'default'}\n\n"
-                f"Session would be started with these parameters.",
+            # Start the session using the session service
+            self.session_service.start_session(
+                project_name=project_name,
+                objective=objective,
+                working_directory=working_directory,
+                session_type=session_type,
             )
 
-            # TODO: Implement proper async session start
-            # This requires proper async integration with Qt
+            # Update UI to show session is starting
+            self.status_label.setText(f"Starting session: {project_name}")
+            self.status_label.setStyleSheet(
+                "QLabel { color: blue; font-weight: bold; padding: 4px; }"
+            )
 
         except Exception as e:
             QMessageBox.critical(
