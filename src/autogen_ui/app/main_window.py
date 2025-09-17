@@ -33,7 +33,8 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import QSettings, QTimer, Qt, Signal
 
 from autogen_ui.widgets import MemoryBrowserWidget
-from autogen_ui.services import IntegrationConfig, IntegrationMode
+from autogen_ui.widgets.server import ServerPanel
+from autogen_ui.services import IntegrationConfig, IntegrationMode, ServerService
 
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,17 @@ class MainWindow(QMainWindow):
         self.current_theme = "system"
 
         logger.info("Initializing MainWindow")
+
+        # Initialize integration config for services
+        self.integration_config = IntegrationConfig(
+            mode=IntegrationMode.DIRECT,  # Try direct integration first
+            mcp_server_url="http://localhost:9000",
+            timeout=30,
+            retry_attempts=3,
+        )
+
+        # Initialize services
+        self.server_service = ServerService(self.integration_config)
 
         # Set up the main window
         self.setup_window()
@@ -583,11 +595,12 @@ class MainWindow(QMainWindow):
     def setup_dock_widgets(self) -> None:
         """Create and configure dock widgets for different panels."""
 
-        # Server Management Panel (placeholder)
+        # Server Management Panel - Real implementation
+        server_panel = ServerPanel(self.server_service)
         self.create_dock_widget(
             "server_panel",
             "Server Management",
-            self.create_server_panel_placeholder(),
+            server_panel,
             Qt.DockWidgetArea.LeftDockWidgetArea,
         )
 
@@ -636,19 +649,6 @@ class MainWindow(QMainWindow):
         self.dock_widgets[name] = dock
 
         return dock
-
-    def create_server_panel_placeholder(self) -> QWidget:
-        """Create placeholder for server management panel."""
-
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        layout.addWidget(QLabel("Server Management"))
-        layout.addWidget(QLabel("Status: Not connected"))
-        layout.addWidget(QPushButton("Connect to MCP Server"))
-        layout.addWidget(QPushButton("Server Health Check"))
-
-        return widget
 
     def create_session_panel_placeholder(self) -> QWidget:
         """Create placeholder for session management panel."""
