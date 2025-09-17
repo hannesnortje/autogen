@@ -123,17 +123,28 @@ class AgentSelectionDialog(QDialog):
 
     def get_available_agents(self) -> List[Dict[str, Any]]:
         """Get list of available agents (presets + custom)"""
-        # Agent presets from AgentManagerWidget
+        # Agent presets with Gemini LLM configuration
         presets = [
             {
                 "name": "Code Assistant",
                 "description": (
                     "Specialized in programming tasks, code review, and "
                     "technical problem-solving. Excellent for development "
-                    "workflows and coding assistance."
+                    "workflows and coding assistance. Uses Gemini LLM."
                 ),
                 "role": "developer",
                 "type": "preset",
+                "llm_config": {
+                    "model": "gemini-2.0-flash",
+                    "api_type": "gemini",
+                    "temperature": 0.3,
+                },
+                "system_message": (
+                    "You are a skilled software developer and code assistant. "
+                    "Help with programming tasks, code review, debugging, and "
+                    "technical problem-solving. Write clean, efficient code "
+                    "with proper documentation."
+                ),
                 "capabilities": [
                     "code_execution",
                     "function_calling",
@@ -145,10 +156,20 @@ class AgentSelectionDialog(QDialog):
                 "description": (
                     "Expert in data analysis, visualization, and "
                     "statistical insights. Perfect for data-driven "
-                    "projects and analytical tasks."
+                    "projects and analytical tasks. Uses Gemini LLM."
                 ),
                 "role": "analyst",
                 "type": "preset",
+                "llm_config": {
+                    "model": "gemini-2.0-flash",
+                    "api_type": "gemini",
+                    "temperature": 0.1,
+                },
+                "system_message": (
+                    "You are a data analyst specializing in data processing, "
+                    "statistical analysis, and visualization. Help analyze "
+                    "data, create insights, and suggest data-driven solutions."
+                ),
                 "capabilities": ["code_execution", "function_calling"],
             },
             {
@@ -156,10 +177,20 @@ class AgentSelectionDialog(QDialog):
                 "description": (
                     "Skilled in content creation, technical writing, and "
                     "documentation. Ideal for documentation and content "
-                    "generation tasks."
+                    "generation tasks. Uses Gemini LLM."
                 ),
                 "role": "writer",
                 "type": "preset",
+                "llm_config": {
+                    "model": "gemini-2.0-flash",
+                    "api_type": "gemini",
+                    "temperature": 0.7,
+                },
+                "system_message": (
+                    "You are a professional content writer and technical "
+                    "documentation specialist. Create clear, comprehensive "
+                    "documentation, READMEs, and user-friendly content."
+                ),
                 "capabilities": ["human_input", "web_browsing"],
             },
             {

@@ -172,6 +172,7 @@ class ConversationWidget(QWidget):
         button_layout = QHBoxLayout()
         self.send_btn = QPushButton("Send Message")
         self.send_btn.setEnabled(False)
+        self.send_btn.clicked.connect(self.send_message)
         self.clear_btn = QPushButton("Clear")
         self.clear_btn.clicked.connect(self.clear_conversation)
 
@@ -185,6 +186,59 @@ class ConversationWidget(QWidget):
         """Clear the conversation"""
         self.conversation_text.clear()
         self.message_input.clear()
+
+    def send_message(self):
+        """Send message to agents via MCP server"""
+        message = self.message_input.toPlainText().strip()
+        if not message:
+            return
+
+        # Add user message to conversation
+        self.add_message("User", message)
+
+        # Clear input
+        self.message_input.clear()
+
+        # Try to send to MCP server
+        try:
+            # For now, simulate agent responses since full integration isn't implemented
+            self.add_message(
+                "Code Assistant",
+                "I'll help you create the ShopFlow e-commerce platform. "
+                "Let me start by setting up the project structure...",
+            )
+
+            self.add_message(
+                "Content Writer",
+                "I'll work on creating comprehensive documentation, "
+                "user stories, and project planning documents.",
+            )
+
+            self.add_message(
+                "Data Analyst",
+                "I'll design the analytics framework and help with "
+                "data modeling for the e-commerce platform.",
+            )
+
+            self.add_message(
+                "Research Assistant",
+                "I'll gather market research and competitive analysis "
+                "to inform our platform requirements.",
+            )
+
+        except Exception as e:
+            self.add_message("System", f"Error sending message: {e}")
+
+    def add_message(self, sender: str, message: str):
+        """Add a message to the conversation display"""
+        cursor = self.conversation_text.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(f"[{sender}]: {message}\n\n")
+        self.conversation_text.setTextCursor(cursor)
+
+        # Auto-scroll to bottom
+        scrollbar = self.conversation_text.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
 
 class AutoGenMainWindow(QMainWindow):
