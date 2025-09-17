@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from autogen_mcp.collections import MemoryScope
+from autogen_mcp.memory_collections import MemoryScope
 from autogen_mcp.multi_memory import MultiScopeMemoryService
 from autogen_mcp.observability import get_logger
 

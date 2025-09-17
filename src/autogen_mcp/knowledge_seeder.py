@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from autogen_mcp.collections import CollectionManager, MemoryEvent, MemoryScope
+from autogen_mcp.memory_collections import CollectionManager, MemoryEvent, MemoryScope
 from autogen_mcp.embeddings import EmbeddingService
 from autogen_mcp.observability import get_logger
 

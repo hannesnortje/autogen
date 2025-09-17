@@ -1,7 +1,7 @@
 <template>
   <div class="mycomponent-container">
     <h2>MyComponent</h2>
-    <p>Vue 3 component for: Begin working on this objective: Test working directory implementation</p>
+    <p>Vue 3 component for: Begin working on this objective: Create a simple Python hello world program that prints a greeting message. Save the program as hello.py in the working directory and make sure it works.</p>
     <div class="content">
       <button @click="handleClick" class="primary-btn">
         Click me

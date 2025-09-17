@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from autogen_mcp.collections import (
+from autogen_mcp.memory_collections import (
     CollectionManager,
     MemoryEvent,
     MemoryScope,

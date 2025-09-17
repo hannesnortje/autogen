@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
 from autogen_mcp.multi_memory import MultiScopeMemoryService, MemoryWriteOptions
-from autogen_mcp.collections import CollectionManager, MemoryScope
+from autogen_mcp.memory_collections import CollectionManager, MemoryScope
 
 
 @dataclass
@@ -294,11 +294,11 @@ Context: {context}
         # Generate summary content
         summary_content = f"""
 Conversation Summary:
-Agent: {conv['agent_name']} ({conv['agent_role']})
-Session: {conv['session_id']}
-Duration: {conv.get('started_at', 'Unknown')} - {datetime.now(timezone.utc)}
-Total turns: {conv.get('turn_count', 0)}
-Initial objective: {conv.get('initial_objective', 'None specified')}
+Agent: {conv["agent_name"]} ({conv["agent_role"]})
+Session: {conv["session_id"]}
+Duration: {conv.get("started_at", "Unknown")} - {datetime.now(timezone.utc)}
+Total turns: {conv.get("turn_count", 0)}
+Initial objective: {conv.get("initial_objective", "None specified")}
 """
 
         if summary:

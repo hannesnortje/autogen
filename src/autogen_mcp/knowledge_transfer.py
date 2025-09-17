@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from autogen_mcp.collections import MemoryScope
+from autogen_mcp.memory_collections import MemoryScope
 from autogen_mcp.multi_memory import MultiScopeMemoryService, MemoryWriteOptions
 from autogen_mcp.observability import get_logger
 
