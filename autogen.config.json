@@ -11,7 +11,7 @@
   },
   "server": {
     "host": "127.0.0.1",
-    "port": 8000,
+    "port": 9000,
     "log_level": "info",
     "enable_ui_endpoints": true,
     "auto_open_browser": false

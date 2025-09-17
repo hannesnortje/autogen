@@ -26,8 +26,13 @@ def create_application() -> QApplication:
 
     # Set application attributes
     app_attrs = Qt.ApplicationAttribute
-    QApplication.setAttribute(app_attrs.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(app_attrs.AA_UseHighDpiPixmaps, True)
+    # Skip deprecated attributes for newer Qt versions
+    try:
+        QApplication.setAttribute(app_attrs.AA_EnableHighDpiScaling, True)
+        QApplication.setAttribute(app_attrs.AA_UseHighDpiPixmaps, True)
+    except AttributeError:
+        # These attributes might not exist in newer Qt versions
+        pass
 
     # Create application
     app = QApplication(sys.argv)
@@ -49,7 +54,7 @@ def load_configuration() -> Dict[str, Any]:
         "debug": False,  # Enable for debug logging
         "integration_mode": "hybrid",  # direct, http, or hybrid
         "window_geometry": {"width": 1200, "height": 800},
-        "mcp_server": {"host": "localhost", "port": 8000, "auto_connect": False},
+        "mcp_server": {"host": "localhost", "port": 9000, "auto_connect": False},
         "ui_features": {
             "session_management": True,
             "memory_browser": True,
@@ -77,13 +82,20 @@ def main() -> int:
         app = create_application()
 
         # Create main window
+        print("DEBUG: About to create MainWindow")
         main_window = MainWindow(config)
+        print("DEBUG: MainWindow created successfully")
+
+        print("DEBUG: About to show window")
         main_window.show()
+        print("DEBUG: Window shown, starting event loop")
 
         logger.info("AutoGen Desktop UI started successfully")
 
         # Run the application
+        print("DEBUG: About to call app.exec()")
         result = app.exec()
+        print("DEBUG: app.exec() completed")
 
         # Log application shutdown
         log_application_shutdown()

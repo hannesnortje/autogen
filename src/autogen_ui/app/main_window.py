@@ -33,7 +33,6 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import QSettings, QTimer, Qt, Signal
 
 from autogen_ui.widgets import MemoryBrowserWidget
-from autogen_ui.services import IntegrationConfig, IntegrationMode
 
 
 logger = logging.getLogger(__name__)
@@ -526,13 +525,20 @@ class MainWindow(QMainWindow):
         self.memory_browser = MemoryBrowserWidget()
 
         # Initialize memory service with default configuration
-        memory_config = IntegrationConfig(
-            mode=IntegrationMode.DIRECT,  # Try direct integration first
-            mcp_server_url="http://localhost:9000",
-            timeout=30,
-            retry_attempts=3,
-        )
-        self.memory_browser.initialize_memory_service(memory_config)
+        # TEMPORARY: Skip memory service to test if Qdrant conflicts are the issue
+        logger.warning("Skipping memory service initialization to test UI")
+        logger.info("UI should work without memory service for now")
+        # try:
+        #     memory_config = IntegrationConfig(
+        #         mode=IntegrationMode.DIRECT,  # Try direct integration first
+        #         mcp_server_url="http://localhost:9000",
+        #         timeout=30,
+        #         retry_attempts=3,
+        #     )
+        #     self.memory_browser.initialize_memory_service(memory_config)
+        # except Exception as e:
+        #     logger.warning(f"Memory service initialization failed: {e}")
+        #     logger.info("Continuing without memory service")
 
         left_panel.addTab(self.memory_browser, "Memory")
 
