@@ -27,6 +27,8 @@ from .widgets import MemoryBrowserWidget, AgentManagerWidget, SessionManagerWidg
 from .widgets.notification_panel import NotificationPanel
 from .services.realtime_service import RealtimeService
 from .services.notification_service import NotificationService
+from .services.data_export_import_service import DataExportImportService
+from .dialogs.data_export_import_dialogs import show_export_dialog, show_import_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +229,19 @@ class AutoGenMainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        # Export/Import actions
+        export_action = QAction("&Export Data...", self)
+        export_action.setShortcut("Ctrl+E")
+        export_action.triggered.connect(self.show_export_dialog)
+        file_menu.addAction(export_action)
+
+        import_action = QAction("&Import Data...", self)
+        import_action.setShortcut("Ctrl+I")
+        import_action.triggered.connect(self.show_import_dialog)
+        file_menu.addAction(import_action)
+
+        file_menu.addSeparator()
+
         exit_action = QAction("E&xit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
@@ -350,6 +365,9 @@ class AutoGenMainWindow(QMainWindow):
         # Initialize services
         self.realtime_service = RealtimeService(ws_url)
         self.notification_service = NotificationService(self)
+        self.data_export_import_service = DataExportImportService(
+            f"http://{self.config['server']['host']}:{self.config['server']['port']}"  # noqa: E501
+        )
 
         logger.info("Services initialized successfully")
 
@@ -417,6 +435,22 @@ class AutoGenMainWindow(QMainWindow):
     def show_notification_preferences(self):
         """Show notification preferences dialog"""
         self.notification_service.show_preferences_dialog()
+
+    def show_export_dialog(self):
+        """Show data export dialog"""
+        try:
+            show_export_dialog(self.data_export_import_service, self)
+        except Exception as e:
+            logger.error(f"Failed to show export dialog: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to open export dialog:\n{e}")
+
+    def show_import_dialog(self):
+        """Show data import dialog"""
+        try:
+            show_import_dialog(self.data_export_import_service, self)
+        except Exception as e:
+            logger.error(f"Failed to show import dialog: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to open import dialog:\n{e}")
 
     def closeEvent(self, event):
         """Handle window close event"""

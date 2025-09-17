@@ -17,6 +17,9 @@ uvicorn = {extras = ["standard"], version = "^0.35.0"}
 PySide6 = "^6.7.0"              # Qt6 Python bindings for desktop UI
 websockets = "^12.0"            # WebSocket client for real-time MCP server updates
 python-multipart = "^0.0.20"
+# Data export/import dependencies
+pandas = "^2.1.0"               # Data manipulation and export to CSV/Excel
+openpyxl = "^3.1.0"             # Excel file format support for pandas
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
