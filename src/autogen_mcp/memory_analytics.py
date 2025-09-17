@@ -156,17 +156,17 @@ class MemoryMetricsCollector:
                     # Handle project collections separately
                     continue
 
-                collection_name = self.collection_manager._get_collection_name(scope)
+                collection_name = self.collection_manager.get_collection_name(scope)
                 try:
-                    info = await self.collection_manager.qdrant.get_collection_info(
+                    info = self.collection_manager.qdrant.get_collection_info(
                         collection_name
                     )
                     if info:
-                        metrics.total_entries += info.get("vectors_count", 0)
+                        metrics.total_entries += info.get("points_count", 0)
                         metrics.collections_count += 1
 
                         # Estimate size (rough calculation)
-                        vector_count = info.get("vectors_count", 0)
+                        vector_count = info.get("points_count", 0)
                         vector_size = (
                             info.get("config", {})
                             .get("params", {})

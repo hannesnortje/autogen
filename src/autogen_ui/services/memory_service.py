@@ -37,6 +37,9 @@ class MemoryService(BaseService):
             return True
         except Exception as e:
             self.logger.error(f"Failed to initialize memory service: {e}")
+            import traceback
+
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
             return False
 
     async def _initialize_direct(self) -> None:
@@ -49,7 +52,16 @@ class MemoryService(BaseService):
 
             # Initialize services directly
             collection_manager = CollectionManager()
+
+            # Initialize all collections
+            collection_manager.initialize_all_collections()
+
             self._memory_service = MultiScopeMemoryService(collection_manager)
+
+            # Initialize the memory service (synchronous call, returns dict)
+            self._memory_service.initialize()
+
+            # Create analytics service (don't start monitoring yet to avoid issues)
             self._analytics_service = MemoryAnalyticsService(self._memory_service)
 
             msg = "Memory service initialized with direct integration"
@@ -112,32 +124,24 @@ class MemoryService(BaseService):
     ) -> List[Dict[str, Any]]:
         """Search memory using direct integration."""
         # Convert scope to memory service format
-        from autogen_mcp.collections import MemoryScope
-
         scope_map = {
-            "conversation": MemoryScope.CONVERSATION,
-            "project": MemoryScope.PROJECT,
-            "global": MemoryScope.GLOBAL,
+            "conversation": "thread",  # Map conversation to thread
+            "project": "project",
+            "global": "global",
         }
-        memory_scope = scope_map.get(scope, MemoryScope.CONVERSATION)
+        scope_str = scope_map.get(scope, "thread")
 
         # Perform direct search
-        results = await self._memory_service.search(
-            query=query, scope=memory_scope, k=k, threshold=threshold
-        )
+        results = self._memory_service.search(query=query, scope=scope_str, limit=k)
 
         # Convert to UI format
         return [
             {
-                "id": result.id,
-                "content": result.content,
-                "metadata": result.metadata,
-                "score": result.score,
-                "timestamp": (
-                    result.timestamp.isoformat()
-                    if hasattr(result, "timestamp")
-                    else None
-                ),
+                "id": result.get("id"),
+                "content": result.get("content"),
+                "metadata": result.get("metadata", {}),
+                "score": result.get("score"),
+                "timestamp": result.get("metadata", {}).get("timestamp"),
             }
             for result in results
         ]
@@ -179,12 +183,14 @@ class MemoryService(BaseService):
 
     async def _get_memory_stats_direct(self) -> Dict[str, Any]:
         """Get memory stats using direct integration."""
-        report = await self._analytics_service.generate_report()
+        report = await self._analytics_service.get_analytics_report()
         return {
-            "total_entries": report.get("total_memories", 0),
-            "memory_usage": report.get("memory_usage", {}),
-            "collection_stats": report.get("collection_stats", {}),
-            "health_score": report.get("health_score", 0.0),
+            "total_entries": report.get("metrics", {})
+            .get("storage", {})
+            .get("total_entries", 0),
+            "memory_usage": report.get("metrics", {}),
+            "collection_stats": report.get("scope_metrics", {}),
+            "health_score": str(report.get("health_status", "unknown")),
         }
 
     async def _get_memory_stats_http(self) -> Dict[str, Any]:
@@ -216,9 +222,14 @@ class MemoryService(BaseService):
     async def _get_memory_health_direct(self) -> Dict[str, Any]:
         """Get memory health using direct integration."""
         if self._analytics_service:
-            health = await self._analytics_service.get_health_metrics()
-            status = "healthy" if health.get("overall_health", 0) > 0.7 else "warning"
-            return {"status": status, "connection": "connected", "metrics": health}
+            report = await self._analytics_service.get_analytics_report()
+            health_status = report.get("health_status", "unknown")
+            alerts = report.get("alerts", [])
+            return {
+                "status": str(health_status),
+                "connection": "connected",
+                "alerts": [alert.get("message", str(alert)) for alert in alerts],
+            }
         return {"status": "unknown", "connection": "disconnected"}
 
     async def _get_memory_health_http(self) -> Dict[str, Any]:
@@ -248,7 +259,7 @@ class MemoryService(BaseService):
             results = await self.search_memory(
                 query="",  # Empty query for browsing
                 scope=scope,
-                k=limit,
+                k=limit,  # k parameter in the public method
                 threshold=0.0,  # No threshold for browsing
             )
 

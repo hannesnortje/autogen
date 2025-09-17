@@ -50,6 +50,13 @@ class QdrantWrapper:
         collections = data.get("result", {}).get("collections", [])
         return [c["name"] for c in collections]
 
+    def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
+        """Get information about a specific collection."""
+        resp = self.session.get(self._url(f"/collections/{collection_name}"), timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("result", {})
+
     def create_collection(
         self,
         name: str,

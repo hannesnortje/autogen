@@ -342,8 +342,17 @@ class MemoryBrowserWidget(QWidget):
                 self._on_connection_status_changed
             )
 
-            # Initialize service
-            asyncio.create_task(self.memory_service.initialize())
+            # Initialize service in background thread
+            # Note: Async initialization handled by service itself
+            try:
+                # Try direct sync initialization for now
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(self.memory_service.initialize())
+                loop.close()
+            except Exception as init_error:
+                msg = f"Service initialization failed: {init_error}"
+                print(f"Warning: {msg}")  # Simple fallback logging
 
             # Initial data refresh
             self._refresh_data()

@@ -126,7 +126,30 @@ class BaseService(QObject):
 
     def _check_health(self) -> None:
         """Check service health (Qt slot for timer)."""
-        asyncio.create_task(self._async_health_check())
+        try:
+            # Run health check in separate thread to avoid event loop issues
+            import threading
+
+            thread = threading.Thread(target=self._sync_health_check)
+            thread.daemon = True
+            thread.start()
+        except Exception as e:
+            self.logger.error(f"Health check thread failed: {e}")
+
+    def _sync_health_check(self) -> None:
+        """Synchronous health check to avoid event loop issues."""
+        try:
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._async_health_check())
+            loop.close()
+        except Exception as e:
+            self.logger.error(f"Health check failed: {e}")
+            # Update connection status to disconnected
+            if self.is_connected:
+                self.is_connected = False
+                self.connection_status_changed.emit(self.is_connected)
 
     async def _async_health_check(self) -> None:
         """Async health check implementation."""
