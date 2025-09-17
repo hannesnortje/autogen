@@ -1,172 +1,227 @@
-"""Memory browser widget for AutoGen UI.
-
-This module provides a comprehensive memory browser interface for viewing,
-searching, and managing Qdrant memory entries with real-time updates.
+"""
+Memory Browser Widget - Clean Implementation
+Browse and search Qdrant memory collections
 """
 
-import asyncio
-from typing import List, Dict, Any
+import logging
+import requests
+from typing import Dict, List
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QSplitter,
+    QGroupBox,
+    QLineEdit,
+    QPushButton,
+    QComboBox,
+    QSpinBox,
+    QLabel,
     QTreeWidget,
     QTreeWidgetItem,
-    QTableWidget,
-    QTableWidgetItem,
-    QLineEdit,
-    QComboBox,
-    QPushButton,
-    QLabel,
-    QGroupBox,
-    QProgressBar,
     QTextEdit,
     QTabWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QFrame,
-    QAbstractItemView,
     QMessageBox,
-    QSpinBox,
+    QCheckBox,
+    QFileDialog,
+    QProgressBar,
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QThread
+from PySide6.QtCore import QTimer, Signal, QThread
 from PySide6.QtGui import QFont
 
-from autogen_ui.services import MemoryService, IntegrationConfig
+logger = logging.getLogger(__name__)
 
 
 class MemoryWorker(QThread):
-    """Worker thread for memory operations to avoid blocking UI."""
+    """Worker thread for memory operations"""
 
-    # Signals for thread-safe communication
     search_completed = Signal(list)
-    stats_updated = Signal(dict)
-    health_updated = Signal(dict)
+    stats_completed = Signal(dict)
+    collections_completed = Signal(list)
+    upload_completed = Signal(dict)
     error_occurred = Signal(str)
 
-    def __init__(self, memory_service: MemoryService):
+    def __init__(self, server_url: str):
         super().__init__()
-        self.memory_service = memory_service
+        self.server_url = server_url
         self.operation = None
         self.params = {}
 
-    def search_memory(self, query: str, scope: str, k: int, threshold: float):
-        """Schedule memory search operation."""
+    def search_memory(self, query: str, collection: str, limit: int = 10):
+        """Search memory entries"""
         self.operation = "search"
-        self.params = {"query": query, "scope": scope, "k": k, "threshold": threshold}
+        self.params = {"query": query, "collection": collection, "limit": limit}
         self.start()
 
     def get_stats(self):
-        """Schedule memory stats retrieval."""
+        """Get memory statistics"""
         self.operation = "stats"
         self.params = {}
         self.start()
 
-    def get_health(self):
-        """Schedule memory health check."""
-        self.operation = "health"
+    def get_collections(self):
+        """Get available collections"""
+        self.operation = "collections"
         self.params = {}
         self.start()
 
+    def upload_file(self, file_path: str, project: str, scope: str):
+        """Upload file to memory"""
+        self.operation = "upload"
+        self.params = {"file_path": file_path, "project": project, "scope": scope}
+        self.start()
+
     def run(self):
-        """Execute the scheduled operation."""
+        """Execute the operation"""
         try:
             if self.operation == "search":
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                results = loop.run_until_complete(
-                    self.memory_service.search_memory(**self.params)
-                )
-                self.search_completed.emit(results)
+                self._search()
             elif self.operation == "stats":
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                stats = loop.run_until_complete(self.memory_service.get_memory_stats())
-                self.stats_updated.emit(stats)
-            elif self.operation == "health":
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                health = loop.run_until_complete(
-                    self.memory_service.get_memory_health()
-                )
-                self.health_updated.emit(health)
+                self._get_stats()
+            elif self.operation == "collections":
+                self._get_collections()
+            elif self.operation == "upload":
+                self._upload_file()
         except Exception as e:
             self.error_occurred.emit(str(e))
 
+    def _search(self):
+        """Perform memory search"""
+        try:
+            response = requests.post(
+                f"{self.server_url}/memory/search",
+                json={
+                    "query": self.params["query"],
+                    "collection": self.params["collection"],
+                    "k": self.params["limit"],
+                },
+                timeout=30,
+            )
+            if response.status_code == 200:
+                results = response.json()
+                self.search_completed.emit(results.get("results", []))
+            else:
+                self.error_occurred.emit(f"Search failed: {response.status_code}")
+        except requests.RequestException as e:
+            self.error_occurred.emit(f"Search request failed: {e}")
+
+    def _get_stats(self):
+        """Get memory statistics"""
+        try:
+            response = requests.get(f"{self.server_url}/memory/stats", timeout=10)
+            if response.status_code == 200:
+                self.stats_completed.emit(response.json())
+            else:
+                self.error_occurred.emit(f"Stats failed: {response.status_code}")
+        except requests.RequestException as e:
+            self.error_occurred.emit(f"Stats request failed: {e}")
+
+    def _get_collections(self):
+        """Get available collections"""
+        try:
+            response = requests.get(f"{self.server_url}/collections", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                collections = data.get("collections", [])
+                self.collections_completed.emit(collections)
+            else:
+                self.error_occurred.emit(f"Collections failed: {response.status_code}")
+        except requests.RequestException as e:
+            self.error_occurred.emit(f"Collections request failed: {e}")
+
+    def _upload_file(self):
+        """Upload file to memory"""
+        try:
+            file_path = self.params["file_path"]
+            project = self.params["project"]
+            scope = self.params["scope"]
+
+            # Read file content
+            with open(file_path, "rb") as f:
+                files = {"file": (file_path.split("/")[-1], f, "text/markdown")}
+                data = {"project": project, "scope": scope}
+
+                response = requests.post(
+                    f"{self.server_url}/memory/upload",
+                    files=files,
+                    data=data,
+                    timeout=60,  # Longer timeout for file upload
+                )
+
+            if response.status_code == 200:
+                result = response.json()
+                self.upload_completed.emit(result)
+            else:
+                self.error_occurred.emit(
+                    f"Upload failed: {response.status_code} - {response.text}"
+                )
+
+        except requests.RequestException as e:
+            self.error_occurred.emit(f"Upload request failed: {e}")
+        except FileNotFoundError:
+            self.error_occurred.emit(f"File not found: {file_path}")
+        except Exception as e:
+            self.error_occurred.emit(f"Upload error: {e}")
+
 
 class MemoryBrowserWidget(QWidget):
-    """Comprehensive memory browser for Qdrant integration.
+    """Advanced memory browser with search and analytics"""
 
-    Features:
-    - Hierarchical memory view by scope (conversation/project/global)
-    - Real-time search with filters
-    - Memory statistics and health monitoring
-    - Memory entry details and metadata view
-    """
+    memory_selected = Signal(dict)
 
-    # Signals for external communication
-    memory_selected = Signal(dict)  # memory_entry
-    search_performed = Signal(str, str)  # query, scope
+    def __init__(self, server_url: str):
+        super().__init__()
+        self.server_url = server_url
+        self.worker = MemoryWorker(server_url)
+        self.collections = []
+        self.current_results = []
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.memory_service = None
-        self.memory_worker = None
-        self.current_memories = []
+        self.setup_ui()
+        self.setup_connections()
+        self.setup_timer()
 
-        self._setup_ui()
-        self._setup_connections()
-        self._setup_timers()
+        # Initial load
+        self.refresh_data()
 
-    def _setup_ui(self):
-        """Set up the user interface."""
+    def setup_ui(self):
+        """Set up the memory browser UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
 
-        # Connection status bar
-        self._setup_connection_status(layout)
+        # Connection status
+        self.setup_status_bar(layout)
 
         # Search controls
-        self._setup_search_controls(layout)
+        self.setup_search_controls(layout)
 
-        # Main content area
-        self._setup_main_content(layout)
+        # Main content area with tabs
+        self.setup_main_content(layout)
 
-        # Statistics panel
-        self._setup_statistics_panel(layout)
-
-    def _setup_connection_status(self, layout):
-        """Set up memory connection status indicator."""
+    def setup_status_bar(self, layout):
+        """Set up memory connection status"""
         status_frame = QFrame()
         status_frame.setFrameStyle(QFrame.StyledPanel)
-        status_frame.setMaximumHeight(40)
+        status_frame.setMaximumHeight(35)
         status_layout = QHBoxLayout(status_frame)
 
-        self.connection_status = QLabel("Memory: Connecting...")
-        self.connection_status.setStyleSheet(
-            """
-            QLabel {
-                color: orange;
-                font-weight: bold;
-                padding: 4px 8px;
-                border-radius: 4px;
-                background-color: rgba(255, 165, 0, 0.1);
-            }
-        """
+        self.status_label = QLabel("Memory: Connecting...")
+        self.status_label.setStyleSheet(
+            "QLabel { color: orange; font-weight: bold; padding: 4px; }"
         )
 
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.setMaximumWidth(80)
-        self.refresh_button.clicked.connect(self._refresh_data)
+        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn.setMaximumWidth(80)
+        self.refresh_btn.clicked.connect(self.refresh_data)
 
-        status_layout.addWidget(self.connection_status)
+        status_layout.addWidget(self.status_label)
         status_layout.addStretch()
-        status_layout.addWidget(self.refresh_button)
+        status_layout.addWidget(self.refresh_btn)
 
         layout.addWidget(status_frame)
 
-    def _setup_search_controls(self, layout):
-        """Set up memory search controls."""
+    def setup_search_controls(self, layout):
+        """Set up search interface"""
         search_group = QGroupBox("Memory Search")
         search_layout = QVBoxLayout(search_group)
 
@@ -175,397 +230,490 @@ class MemoryBrowserWidget(QWidget):
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Enter search query...")
-        self.search_input.returnPressed.connect(self._perform_search)
+        self.search_input.returnPressed.connect(self.perform_search)
 
-        self.search_button = QPushButton("Search")
-        self.search_button.clicked.connect(self._perform_search)
-        self.search_button.setMaximumWidth(80)
+        self.search_btn = QPushButton("Search")
+        self.search_btn.clicked.connect(self.perform_search)
+        self.search_btn.setMaximumWidth(80)
 
         search_row.addWidget(self.search_input)
-        search_row.addWidget(self.search_button)
+        search_row.addWidget(self.search_btn)
         search_layout.addLayout(search_row)
 
-        # Search options row
+        # Search options
         options_row = QHBoxLayout()
 
-        # Scope selector
-        options_row.addWidget(QLabel("Scope:"))
-        self.scope_combo = QComboBox()
-        self.scope_combo.addItems(["conversation", "project", "global"])
-        self.scope_combo.setMaximumWidth(120)
-        options_row.addWidget(self.scope_combo)
+        options_row.addWidget(QLabel("Collection:"))
+        self.collection_combo = QComboBox()
+        self.collection_combo.setMinimumWidth(120)
+        options_row.addWidget(self.collection_combo)
 
-        # Results limit
-        options_row.addWidget(QLabel("Results:"))
-        self.limit_spinner = QSpinBox()
-        self.limit_spinner.setRange(1, 100)
-        self.limit_spinner.setValue(10)
-        self.limit_spinner.setMaximumWidth(70)
-        options_row.addWidget(self.limit_spinner)
+        options_row.addWidget(QLabel("Limit:"))
+        self.limit_spin = QSpinBox()
+        self.limit_spin.setRange(1, 100)
+        self.limit_spin.setValue(10)
+        self.limit_spin.setMaximumWidth(60)
+        options_row.addWidget(self.limit_spin)
 
-        # Threshold
-        options_row.addWidget(QLabel("Threshold:"))
-        self.threshold_combo = QComboBox()
-        self.threshold_combo.addItems(["0.0", "0.3", "0.5", "0.7", "0.9"])
-        self.threshold_combo.setCurrentText("0.5")
-        self.threshold_combo.setMaximumWidth(60)
-        options_row.addWidget(self.threshold_combo)
+        self.auto_search_cb = QCheckBox("Auto-search")
+        self.auto_search_cb.setToolTip("Automatically search as you type")
+        options_row.addWidget(self.auto_search_cb)
 
         options_row.addStretch()
         search_layout.addLayout(options_row)
 
         layout.addWidget(search_group)
 
-    def _setup_main_content(self, layout):
-        """Set up main content area with splitter."""
-        main_splitter = QSplitter(Qt.Horizontal)
+    def setup_main_content(self, layout):
+        """Set up main tabbed content area"""
+        self.tab_widget = QTabWidget()
 
-        # Memory tree (left side)
-        self._setup_memory_tree(main_splitter)
+        # Results tab
+        self.setup_results_tab()
 
-        # Memory details (right side)
-        self._setup_memory_details(main_splitter)
+        # Upload tab - NEW
+        self.setup_upload_tab()
 
-        # Set splitter proportions
-        main_splitter.setSizes([300, 400])
+        # Statistics tab
+        self.setup_statistics_tab()
 
-        layout.addWidget(main_splitter)
+        # Collections tab
+        self.setup_collections_tab()
 
-    def _setup_memory_tree(self, parent):
-        """Set up hierarchical memory tree."""
-        tree_widget = QWidget()
-        tree_layout = QVBoxLayout(tree_widget)
+        layout.addWidget(self.tab_widget)
 
-        tree_label = QLabel("Memory Entries")
-        tree_label.setFont(QFont("", 10, QFont.Bold))
-        tree_layout.addWidget(tree_label)
+    def setup_results_tab(self):
+        """Set up search results tab"""
+        results_widget = QWidget()
+        results_layout = QVBoxLayout(results_widget)
 
-        self.memory_tree = QTreeWidget()
-        self.memory_tree.setHeaderLabels(["Content", "Scope", "Score", "Date"])
-        self.memory_tree.setAlternatingRowColors(True)
-        self.memory_tree.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.memory_tree.itemSelectionChanged.connect(self._on_memory_selected)
+        # Results header
+        header_layout = QHBoxLayout()
+        self.results_label = QLabel("No search performed")
+        header_layout.addWidget(self.results_label)
+        header_layout.addStretch()
 
-        # Configure columns
-        header = self.memory_tree.header()
-        header.resizeSection(0, 200)  # Content
-        header.resizeSection(1, 80)  # Scope
-        header.resizeSection(2, 60)  # Score
-        header.resizeSection(3, 100)  # Date
+        self.clear_btn = QPushButton("Clear Results")
+        self.clear_btn.clicked.connect(self.clear_results)
+        self.clear_btn.setMaximumWidth(100)
+        header_layout.addWidget(self.clear_btn)
 
-        tree_layout.addWidget(self.memory_tree)
-        parent.addWidget(tree_widget)
+        results_layout.addLayout(header_layout)
 
-    def _setup_memory_details(self, parent):
-        """Set up memory details panel."""
-        details_widget = QWidget()
-        details_layout = QVBoxLayout(details_widget)
+        # Results table
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(4)
+        self.results_table.setHorizontalHeaderLabels(
+            ["Score", "Content", "Metadata", "Timestamp"]
+        )
+        self.results_table.horizontalHeader().setStretchLastSection(True)
+        self.results_table.setAlternatingRowColors(True)
+        self.results_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.results_table.itemSelectionChanged.connect(self.on_result_selected)
 
-        details_label = QLabel("Memory Details")
-        details_label.setFont(QFont("", 10, QFont.Bold))
-        details_layout.addWidget(details_label)
+        results_layout.addWidget(self.results_table)
 
-        # Tabbed details view
-        details_tabs = QTabWidget()
+        # Selected result details
+        details_group = QGroupBox("Selected Result Details")
+        details_layout = QVBoxLayout(details_group)
 
-        # Content tab
-        self.content_text = QTextEdit()
-        self.content_text.setReadOnly(True)
-        self.content_text.setPlaceholderText("Select a memory entry to view content...")
-        details_tabs.addTab(self.content_text, "Content")
+        self.details_text = QTextEdit()
+        self.details_text.setMaximumHeight(150)
+        self.details_text.setReadOnly(True)
+        details_layout.addWidget(self.details_text)
 
-        # Metadata tab
-        self.metadata_table = QTableWidget()
-        self.metadata_table.setColumnCount(2)
-        self.metadata_table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.metadata_table.horizontalHeader().setStretchLastSection(True)
-        details_tabs.addTab(self.metadata_table, "Metadata")
+        results_layout.addWidget(details_group)
 
-        details_layout.addWidget(details_tabs)
-        parent.addWidget(details_widget)
+        self.tab_widget.addTab(results_widget, "Search Results")
 
-    def _setup_statistics_panel(self, layout):
-        """Set up memory statistics panel."""
-        stats_group = QGroupBox("Memory Statistics")
-        stats_layout = QHBoxLayout(stats_group)
+    def setup_upload_tab(self):
+        """Set up file upload tab"""
+        upload_widget = QWidget()
+        upload_layout = QVBoxLayout(upload_widget)
 
-        # Entry count
-        self.total_entries_label = QLabel("Entries: --")
-        stats_layout.addWidget(self.total_entries_label)
+        # Upload instructions
+        instructions_group = QGroupBox("File Upload Instructions")
+        instructions_layout = QVBoxLayout(instructions_group)
 
-        # Memory usage
-        self.memory_usage_label = QLabel("Usage: --")
-        stats_layout.addWidget(self.memory_usage_label)
+        instructions_text = QTextEdit()
+        instructions_text.setReadOnly(True)
+        instructions_text.setMaximumHeight(100)
+        instructions_text.setHtml(
+            """
+        <b>Upload Markdown Files to Memory</b><br>
+        • Select .md files to add to the knowledge base<br>
+        • Files will be chunked and indexed for search<br>
+        • Choose appropriate project and scope settings
+        """
+        )
+        instructions_layout.addWidget(instructions_text)
+        upload_layout.addWidget(instructions_group)
 
-        # Health status
-        self.health_status_label = QLabel("Health: Unknown")
-        stats_layout.addWidget(self.health_status_label)
+        # File selection
+        file_group = QGroupBox("File Selection")
+        file_layout = QVBoxLayout(file_group)
 
-        # Progress bar for operations
-        self.operation_progress = QProgressBar()
-        self.operation_progress.setVisible(False)
-        stats_layout.addWidget(self.operation_progress)
+        # File path display
+        file_path_layout = QHBoxLayout()
+        self.file_path_label = QLabel("No file selected")
+        self.file_path_label.setStyleSheet("color: gray; font-style: italic;")
+        file_path_layout.addWidget(QLabel("Selected File:"))
+        file_path_layout.addWidget(self.file_path_label, 1)
 
-        stats_layout.addStretch()
-        layout.addWidget(stats_group)
+        self.browse_btn = QPushButton("Browse Files...")
+        self.browse_btn.clicked.connect(self.browse_files)
+        file_path_layout.addWidget(self.browse_btn)
 
-    def _setup_connections(self):
-        """Set up signal connections."""
-        pass
+        file_layout.addLayout(file_path_layout)
+        upload_layout.addWidget(file_group)
 
-    def _setup_timers(self):
-        """Set up refresh timers."""
-        # Stats refresh timer
-        self.stats_timer = QTimer()
-        self.stats_timer.timeout.connect(self._refresh_stats)
-        self.stats_timer.start(10000)  # Refresh every 10 seconds
+        # Upload settings
+        settings_group = QGroupBox("Upload Settings")
+        settings_layout = QHBoxLayout(settings_group)
 
-        # Health check timer
-        self.health_timer = QTimer()
-        self.health_timer.timeout.connect(self._check_health)
-        self.health_timer.start(30000)  # Check every 30 seconds
+        settings_layout.addWidget(QLabel("Project:"))
+        self.project_input = QLineEdit("default")
+        self.project_input.setPlaceholderText("Enter project name")
+        settings_layout.addWidget(self.project_input)
 
-    def initialize_memory_service(self, config: IntegrationConfig):
-        """Initialize memory service with configuration."""
-        try:
-            self.memory_service = MemoryService(config, self)
-            self.memory_worker = MemoryWorker(self.memory_service)
+        settings_layout.addWidget(QLabel("Scope:"))
+        self.scope_combo = QComboBox()
+        self.scope_combo.addItems(["project", "global", "artifacts"])
+        settings_layout.addWidget(self.scope_combo)
 
-            # Connect worker signals
-            self.memory_worker.search_completed.connect(self._on_search_completed)
-            self.memory_worker.stats_updated.connect(self._on_stats_updated)
-            self.memory_worker.health_updated.connect(self._on_health_updated)
-            self.memory_worker.error_occurred.connect(self._on_error_occurred)
+        upload_layout.addWidget(settings_group)
 
-            # Connect service signals
-            self.memory_service.connection_status_changed.connect(
-                self._on_connection_status_changed
-            )
+        # Upload controls
+        controls_layout = QHBoxLayout()
 
-            # Initialize service in background thread
-            # Note: Async initialization handled by service itself
-            try:
-                # Try direct sync initialization for now
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(self.memory_service.initialize())
-                loop.close()
-            except Exception as init_error:
-                msg = f"Service initialization failed: {init_error}"
-                print(f"Warning: {msg}")  # Simple fallback logging
+        self.upload_btn = QPushButton("Upload to Memory")
+        self.upload_btn.setEnabled(False)
+        self.upload_btn.clicked.connect(self.upload_file)
+        controls_layout.addWidget(self.upload_btn)
 
-            # Initial data refresh
-            self._refresh_data()
+        controls_layout.addStretch()
 
-        except Exception as e:
-            self._show_error(f"Failed to initialize memory service: {e}")
+        self.clear_selection_btn = QPushButton("Clear Selection")
+        self.clear_selection_btn.clicked.connect(self.clear_file_selection)
+        controls_layout.addWidget(self.clear_selection_btn)
 
-    def _perform_search(self):
-        """Perform memory search."""
-        if not self.memory_worker:
-            self._show_error("Memory service not initialized")
-            return
+        upload_layout.addLayout(controls_layout)
 
+        # Upload progress
+        progress_group = QGroupBox("Upload Progress")
+        progress_layout = QVBoxLayout(progress_group)
+
+        self.upload_progress = QProgressBar()
+        self.upload_progress.setVisible(False)
+        progress_layout.addWidget(self.upload_progress)
+
+        self.upload_status = QTextEdit()
+        self.upload_status.setReadOnly(True)
+        self.upload_status.setMaximumHeight(100)
+        self.upload_status.setPlaceholderText("Upload status will appear here...")
+        progress_layout.addWidget(self.upload_status)
+
+        upload_layout.addWidget(progress_group)
+
+        upload_layout.addStretch()
+
+        self.tab_widget.addTab(upload_widget, "Upload Files")
+
+    def setup_statistics_tab(self):
+        """Set up memory statistics tab"""
+        stats_widget = QWidget()
+        stats_layout = QVBoxLayout(stats_widget)
+
+        # Statistics display
+        self.stats_text = QTextEdit()
+        self.stats_text.setReadOnly(True)
+        self.stats_text.setFont(QFont("monospace"))
+        stats_layout.addWidget(self.stats_text)
+
+        # Refresh button
+        refresh_stats_btn = QPushButton("Refresh Statistics")
+        refresh_stats_btn.clicked.connect(self.refresh_stats)
+        stats_layout.addWidget(refresh_stats_btn)
+
+        self.tab_widget.addTab(stats_widget, "Statistics")
+
+    def setup_collections_tab(self):
+        """Set up collections management tab"""
+        collections_widget = QWidget()
+        collections_layout = QVBoxLayout(collections_widget)
+
+        # Collections tree
+        self.collections_tree = QTreeWidget()
+        self.collections_tree.setHeaderLabels(
+            ["Collection", "Documents", "Vectors", "Status"]
+        )
+        collections_layout.addWidget(self.collections_tree)
+
+        # Collection actions
+        actions_layout = QHBoxLayout()
+
+        refresh_collections_btn = QPushButton("Refresh Collections")
+        refresh_collections_btn.clicked.connect(self.refresh_collections)
+        actions_layout.addWidget(refresh_collections_btn)
+
+        actions_layout.addStretch()
+        collections_layout.addLayout(actions_layout)
+
+        self.tab_widget.addTab(collections_widget, "Collections")
+
+    def setup_connections(self):
+        """Set up signal connections"""
+        # Worker signals
+        self.worker.search_completed.connect(self.on_search_completed)
+        self.worker.stats_completed.connect(self.on_stats_completed)
+        self.worker.collections_completed.connect(self.on_collections_completed)
+        self.worker.upload_completed.connect(self.on_upload_completed)
+        self.worker.error_occurred.connect(self.on_error_occurred)
+
+        # Auto-search
+        self.search_input.textChanged.connect(self.on_search_text_changed)
+
+    def setup_timer(self):
+        """Set up periodic refresh timer"""
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.refresh_stats)
+        self.timer.start(30000)  # Refresh stats every 30 seconds
+
+    def refresh_data(self):
+        """Refresh all data"""
+        self.refresh_collections()
+        self.refresh_stats()
+
+    def refresh_collections(self):
+        """Refresh collections list"""
+        self.worker.get_collections()
+
+    def refresh_stats(self):
+        """Refresh memory statistics"""
+        self.worker.get_stats()
+
+    def perform_search(self):
+        """Perform memory search"""
         query = self.search_input.text().strip()
-        scope = self.scope_combo.currentText()
-        k = self.limit_spinner.value()
-        threshold = float(self.threshold_combo.currentText())
-
         if not query:
-            self._refresh_memories()  # Browse all if no query
             return
+
+        collection = self.collection_combo.currentText()
+        if not collection:
+            QMessageBox.warning(self, "Warning", "Please select a collection")
+            return
+
+        limit = self.limit_spin.value()
+
+        self.results_label.setText("Searching...")
+        self.search_btn.setEnabled(False)
+
+        self.worker.search_memory(query, collection, limit)
+
+    def clear_results(self):
+        """Clear search results"""
+        self.results_table.setRowCount(0)
+        self.details_text.clear()
+        self.results_label.setText("Results cleared")
+        self.current_results = []
+
+    def on_search_text_changed(self):
+        """Handle search text changes for auto-search"""
+        if self.auto_search_cb.isChecked():
+            # Debounce auto-search
+            if hasattr(self, "auto_search_timer"):
+                self.auto_search_timer.stop()
+            else:
+                self.auto_search_timer = QTimer()
+                self.auto_search_timer.setSingleShot(True)
+                self.auto_search_timer.timeout.connect(self.perform_search)
+
+            self.auto_search_timer.start(500)  # 500ms delay
+
+    def on_search_completed(self, results: List[Dict]):
+        """Handle search completion"""
+        self.search_btn.setEnabled(True)
+        self.current_results = results
+
+        self.results_table.setRowCount(len(results))
+
+        for row, result in enumerate(results):
+            # Score
+            score_item = QTableWidgetItem(f"{result.get('score', 0.0):.3f}")
+            self.results_table.setItem(row, 0, score_item)
+
+            # Content preview
+            content = result.get("payload", {}).get("content", "No content")
+            content_preview = (content[:100] + "...") if len(content) > 100 else content
+            content_item = QTableWidgetItem(content_preview)
+            self.results_table.setItem(row, 1, content_item)
+
+            # Metadata
+            metadata = result.get("payload", {})
+            metadata_str = f"Scope: {metadata.get('scope', 'N/A')}"
+            metadata_item = QTableWidgetItem(metadata_str)
+            self.results_table.setItem(row, 2, metadata_item)
+
+            # Timestamp
+            timestamp = metadata.get("timestamp", "N/A")
+            timestamp_item = QTableWidgetItem(str(timestamp))
+            self.results_table.setItem(row, 3, timestamp_item)
+
+        self.results_label.setText(f"Found {len(results)} results")
+
+        # Auto-resize columns
+        self.results_table.resizeColumnsToContents()
+
+    def on_stats_completed(self, stats: Dict):
+        """Handle statistics completion"""
+        self.status_label.setText("Memory: Connected")
+        self.status_label.setStyleSheet(
+            "QLabel { color: green; font-weight: bold; padding: 4px; }"
+        )
+
+        # Format statistics
+        stats_text = "Memory Statistics\n"
+        stats_text += "=" * 50 + "\n\n"
+
+        for collection, data in stats.items():
+            if isinstance(data, dict):
+                stats_text += f"Collection: {collection}\n"
+                stats_text += f"  Documents: {data.get('documents_count', 0)}\n"
+                stats_text += f"  Vectors: {data.get('vectors_count', 0)}\n"
+                stats_text += f"  Points: {data.get('points_count', 0)}\n"
+                stats_text += f"  Indexed: {data.get('indexed_vectors_count', 0)}\n"
+                stats_text += "\n"
+
+        self.stats_text.setPlainText(stats_text)
+
+    def on_collections_completed(self, collections: List[str]):
+        """Handle collections list completion"""
+        self.collections = collections
+
+        # Update combo box
+        current_selection = self.collection_combo.currentText()
+        self.collection_combo.clear()
+        self.collection_combo.addItems(collections)
+
+        # Restore selection if possible
+        if current_selection in collections:
+            index = collections.index(current_selection)
+            self.collection_combo.setCurrentIndex(index)
+        elif collections:
+            self.collection_combo.setCurrentIndex(0)
+
+        # Update collections tree
+        self.collections_tree.clear()
+        for collection in collections:
+            item = QTreeWidgetItem([collection, "Loading...", "Loading...", "Active"])
+            self.collections_tree.addTopLevelItem(item)
+
+    def on_error_occurred(self, error: str):
+        """Handle worker errors"""
+        self.search_btn.setEnabled(True)
+        self.status_label.setText("Memory: Error")
+        self.status_label.setStyleSheet(
+            "QLabel { color: red; font-weight: bold; padding: 4px; }"
+        )
+
+        # Show error in stats tab
+        self.stats_text.setPlainText(f"Error: {error}")
+
+        # Handle upload errors
+        if hasattr(self, "upload_progress"):
+            self.upload_progress.setVisible(False)
+            self.upload_btn.setEnabled(True)
+            self.upload_status.append(f"❌ ERROR: {error}")
+
+        logger.error(f"Memory browser error: {error}")
+
+    def on_result_selected(self):
+        """Handle result selection"""
+        current_row = self.results_table.currentRow()
+        if 0 <= current_row < len(self.current_results):
+            result = self.current_results[current_row]
+
+            # Format detailed view
+            details = "Selected Memory Entry\n"
+            details += "=" * 30 + "\n\n"
+
+            details += f"Score: {result.get('score', 'N/A')}\n"
+            details += f"ID: {result.get('id', 'N/A')}\n\n"
+
+            payload = result.get("payload", {})
+            details += f"Content:\n{payload.get('content', 'No content')}\n\n"
+
+            details += "Metadata:\n"
+            for key, value in payload.items():
+                if key != "content":
+                    details += f"  {key}: {value}\n"
+
+            self.details_text.setPlainText(details)
+
+            # Emit signal for external handling
+            self.memory_selected.emit(result)
+
+    def browse_files(self):
+        """Open file dialog to select markdown files"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Markdown File", "", "Markdown files (*.md);;All files (*.*)"
+        )
+
+        if file_path:
+            self.file_path_label.setText(file_path)
+            self.file_path_label.setStyleSheet("color: black;")
+            self.upload_btn.setEnabled(True)
+            self.selected_file_path = file_path
+
+    def clear_file_selection(self):
+        """Clear the selected file"""
+        self.file_path_label.setText("No file selected")
+        self.file_path_label.setStyleSheet("color: gray; font-style: italic;")
+        self.upload_btn.setEnabled(False)
+        self.selected_file_path = None
+        self.upload_status.clear()
+
+    def upload_file(self):
+        """Upload the selected file to memory"""
+        if not hasattr(self, "selected_file_path") or not self.selected_file_path:
+            QMessageBox.warning(self, "Warning", "Please select a file first")
+            return
+
+        project = self.project_input.text().strip() or "default"
+        scope = self.scope_combo.currentText()
 
         # Show progress
-        self.operation_progress.setVisible(True)
-        self.operation_progress.setRange(0, 0)  # Indeterminate progress
+        self.upload_progress.setVisible(True)
+        self.upload_progress.setRange(0, 0)  # Indeterminate progress
+        self.upload_btn.setEnabled(False)
 
-        # Perform search in worker thread
-        self.memory_worker.search_memory(query, scope, k, threshold)
+        # Add status message
+        self.upload_status.append(f"Uploading {self.selected_file_path}...")
+        self.upload_status.append(f"Project: {project}, Scope: {scope}")
 
-        # Emit signal for external listeners
-        self.search_performed.emit(query, scope)
+        # Start upload
+        self.worker.upload_file(self.selected_file_path, project, scope)
 
-    def _refresh_memories(self):
-        """Refresh memory list (browse all)."""
-        if not self.memory_worker:
-            return
+    def on_upload_completed(self, result: dict):
+        """Handle upload completion"""
+        self.upload_progress.setVisible(False)
+        self.upload_btn.setEnabled(True)
 
-        # Use empty query to browse all memories
-        scope = self.scope_combo.currentText()
-        k = 50  # Browse limit
+        # Show success message
+        filename = result.get("filename", "Unknown")
+        chunks = result.get("chunks_processed", 0)
+        message = result.get("message", "Upload completed")
 
-        self.memory_worker.search_memory("", scope, k, 0.0)
+        self.upload_status.append(f"✅ SUCCESS: {message}")
+        self.upload_status.append(f"📄 File: {filename}")
+        self.upload_status.append(f"📝 Chunks processed: {chunks}")
 
-    def _refresh_stats(self):
-        """Refresh memory statistics."""
-        if self.memory_worker and not self.memory_worker.isRunning():
-            self.memory_worker.get_stats()
-
-    def _check_health(self):
-        """Check memory system health."""
-        if self.memory_worker and not self.memory_worker.isRunning():
-            self.memory_worker.get_health()
-
-    def _refresh_data(self):
-        """Refresh all data."""
-        self._refresh_memories()
-        self._refresh_stats()
-        self._check_health()
-
-    def _on_search_completed(self, results: List[Dict[str, Any]]):
-        """Handle search results."""
-        self.operation_progress.setVisible(False)
-        self.current_memories = results
-        self._populate_memory_tree(results)
-
-    def _on_stats_updated(self, stats: Dict[str, Any]):
-        """Handle updated statistics."""
-        total = stats.get("total_entries", 0)
-        self.total_entries_label.setText(f"Entries: {total}")
-
-        usage = stats.get("memory_usage", {})
-        usage_mb = usage.get("total_mb", 0)
-        self.memory_usage_label.setText(f"Usage: {usage_mb:.1f} MB")
-
-    def _on_health_updated(self, health: Dict[str, Any]):
-        """Handle updated health status."""
-        status = health.get("status", "unknown")
-        self.health_status_label.setText(f"Health: {status.title()}")
-
-        # Update status color
-        color = (
-            "green"
-            if status == "healthy"
-            else "orange" if status == "warning" else "red"
+        # Show success dialog
+        QMessageBox.information(
+            self,
+            "Upload Successful",
+            f"Successfully uploaded {filename}\nProcessed {chunks} chunks\n\n{message}",
         )
-        self.health_status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
 
-    def _on_connection_status_changed(self, is_connected: bool):
-        """Handle connection status changes."""
-        if is_connected:
-            self.connection_status.setText("Memory: Connected")
-            self.connection_status.setStyleSheet(
-                """
-                QLabel {
-                    color: green;
-                    font-weight: bold;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    background-color: rgba(0, 255, 0, 0.1);
-                }
-            """
-            )
-        else:
-            self.connection_status.setText("Memory: Disconnected")
-            self.connection_status.setStyleSheet(
-                """
-                QLabel {
-                    color: red;
-                    font-weight: bold;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    background-color: rgba(255, 0, 0, 0.1);
-                }
-            """
-            )
-
-    def _on_error_occurred(self, error_msg: str):
-        """Handle worker thread errors."""
-        self.operation_progress.setVisible(False)
-        self._show_error(error_msg)
-
-    def _populate_memory_tree(self, memories: List[Dict[str, Any]]):
-        """Populate memory tree with results."""
-        self.memory_tree.clear()
-
-        for memory in memories:
-            item = QTreeWidgetItem()
-
-            # Truncate content for display
-            content = memory.get("content", "")
-            if len(content) > 60:
-                content = content[:57] + "..."
-            item.setText(0, content)
-
-            item.setText(1, memory.get("metadata", {}).get("scope", "unknown"))
-            item.setText(2, f"{memory.get('score', 0):.3f}")
-
-            # Format timestamp
-            timestamp = memory.get("timestamp", "")
-            if timestamp:
-                try:
-                    from datetime import datetime
-
-                    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                    formatted_date = dt.strftime("%Y-%m-%d %H:%M")
-                    item.setText(3, formatted_date)
-                except (ValueError, TypeError):
-                    item.setText(3, timestamp[:10])  # Just date part
-
-            # Store full memory data
-            item.setData(0, Qt.UserRole, memory)
-
-            self.memory_tree.addTopLevelItem(item)
-
-    def _on_memory_selected(self):
-        """Handle memory selection change."""
-        selected_items = self.memory_tree.selectedItems()
-        if not selected_items:
-            self._clear_details()
-            return
-
-        memory_data = selected_items[0].data(0, Qt.UserRole)
-        if memory_data:
-            self._show_memory_details(memory_data)
-            self.memory_selected.emit(memory_data)
-
-    def _show_memory_details(self, memory: Dict[str, Any]):
-        """Show detailed memory information."""
-        # Content tab
-        content = memory.get("content", "No content")
-        self.content_text.setPlainText(content)
-
-        # Metadata tab
-        metadata = memory.get("metadata", {})
-        self.metadata_table.setRowCount(
-            len(metadata) + 3
-        )  # +3 for id, score, timestamp
-
-        row = 0
-        # Add core properties
-        core_props = [
-            ("ID", memory.get("id", "N/A")),
-            ("Score", f"{memory.get('score', 0):.6f}"),
-            ("Timestamp", memory.get("timestamp", "N/A")),
-        ]
-
-        for key, value in core_props:
-            self.metadata_table.setItem(row, 0, QTableWidgetItem(key))
-            self.metadata_table.setItem(row, 1, QTableWidgetItem(str(value)))
-            row += 1
-
-        # Add metadata properties
-        for key, value in metadata.items():
-            self.metadata_table.setItem(row, 0, QTableWidgetItem(key))
-            self.metadata_table.setItem(row, 1, QTableWidgetItem(str(value)))
-            row += 1
-
-    def _clear_details(self):
-        """Clear memory details display."""
-        self.content_text.clear()
-        self.metadata_table.setRowCount(0)
-
-    def _show_error(self, message: str):
-        """Show error message to user."""
-        QMessageBox.warning(self, "Memory Browser Error", message)
-
-    def closeEvent(self, event):
-        """Clean up on widget close."""
-        if self.memory_worker:
-            self.memory_worker.quit()
-            self.memory_worker.wait()
-
-        if self.memory_service:
-            asyncio.create_task(self.memory_service.close())
-
-        super().closeEvent(event)
+        # Refresh data to show updated statistics
+        self.refresh_data()

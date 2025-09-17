@@ -163,3 +163,61 @@ class QdrantWrapper:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def delete_point(
+        self,
+        collection: str,
+        point_id: str,
+    ) -> Dict[str, Any]:
+        """Delete a specific point by ID."""
+        resp = self.session.delete(
+            self._url(f"/collections/{collection}/points/{point_id}"),
+            params={"wait": "true"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def delete_points(
+        self,
+        collection: str,
+        point_ids: List[str],
+    ) -> Dict[str, Any]:
+        """Delete multiple points by IDs."""
+        body = {"points": point_ids}
+        resp = self.session.post(
+            self._url(f"/collections/{collection}/points/delete"),
+            json=body,
+            params={"wait": "true"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def delete_collection(self, collection_name: str) -> Dict[str, Any]:
+        """Delete entire collection."""
+        resp = self.session.delete(
+            self._url(f"/collections/{collection_name}"),
+            params={"timeout": "60"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def delete_points_by_filter(
+        self,
+        collection: str,
+        filter_conditions: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Delete points matching filter conditions."""
+        body = {
+            "filter": filter_conditions,
+            "wait": True,
+        }
+        resp = self.session.post(
+            self._url(f"/collections/{collection}/points/delete"),
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()

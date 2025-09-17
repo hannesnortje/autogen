@@ -1,12 +1,6 @@
-# Services package for AutoGen UI
-# Provides integration services for connecting the UI to the MCP server
+"""
+Services Package for AutoGen UI
 
-from .base_service import BaseService, IntegrationConfig, IntegrationMode
-from .memory_service import MemoryService
-
-__all__ = [
-    "BaseService",
-    "IntegrationConfig",
-    "IntegrationMode",
-    "MemoryService",
-]
+Provides centralized services for real-time communication,
+notifications, and other cross-widget functionality.
+"""

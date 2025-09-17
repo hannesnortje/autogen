@@ -8,17 +8,12 @@ It sets up the Qt application, logging, and launches the main window.
 
 import sys
 import logging
-from typing import Dict, Any
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 
-from autogen_ui.app.main_window import MainWindow
-from autogen_ui.utils.logging_config import (
-    setup_ui_logging,
-    log_application_startup,
-    log_application_shutdown,
-)
+from autogen_ui.main_window import AutoGenMainWindow
+from autogen_ui.config import load_config
 
 
 def create_application() -> QApplication:
@@ -44,67 +39,41 @@ def create_application() -> QApplication:
     return app
 
 
-def load_configuration() -> Dict[str, Any]:
-    """Load application configuration."""
-
-    return {
-        "app_name": "AutoGen Desktop",
-        "app_version": "0.1.0",
-        "theme": "system",
-        "debug": False,  # Enable for debug logging
-        "integration_mode": "hybrid",  # direct, http, or hybrid
-        "window_geometry": {"width": 1200, "height": 800},
-        "mcp_server": {"host": "localhost", "port": 9000, "auto_connect": False},
-        "ui_features": {
-            "session_management": True,
-            "memory_browser": True,
-            "agent_configuration": True,
-            "server_management": True,
-        },
-    }
-
-
 def main() -> int:
     """Main application entry point."""
 
     try:
         # Load configuration first
-        config = load_configuration()
+        config = load_config()
 
-        # Set up enhanced logging system
-        setup_ui_logging(config)
+        # Set up basic logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
         logger = logging.getLogger(__name__)
 
-        # Log application startup
-        log_application_startup(config)
+        logger.info("Starting AutoGen Desktop UI...")
 
         # Create Qt application
         app = create_application()
 
         # Create main window
-        print("DEBUG: About to create MainWindow")
-        main_window = MainWindow(config)
-        print("DEBUG: MainWindow created successfully")
-
-        print("DEBUG: About to show window")
+        main_window = AutoGenMainWindow(config)
         main_window.show()
-        print("DEBUG: Window shown, starting event loop")
 
         logger.info("AutoGen Desktop UI started successfully")
 
         # Run the application
-        print("DEBUG: About to call app.exec()")
         result = app.exec()
-        print("DEBUG: app.exec() completed")
 
-        # Log application shutdown
-        log_application_shutdown()
-
+        logger.info("AutoGen Desktop UI shutting down...")
         return result
 
     except Exception as e:
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to start AutoGen Desktop UI: {e}")
+        print(f"ERROR: {e}")
         return 1
 
 

@@ -406,6 +406,270 @@ async def memory_search(req: MemorySearchRequest):
         raise HTTPException(status_code=500, detail=f"Memory search failed: {str(e)}")
 
 
+class MemoryDeleteRequest(BaseModel):
+    point_ids: List[str]
+    collection: str
+    backup: bool = True
+
+
+class FilteredDeleteRequest(BaseModel):
+    collection: str
+    filters: dict
+    max_count: int = 100
+    backup: bool = True
+
+
+class DeleteResponse(BaseModel):
+    success: bool
+    deleted_count: int
+    message: str
+    backup_created: bool = False
+
+
+@app.delete("/memory/point/{collection_name}/{point_id}")
+async def delete_memory_point(collection_name: str, point_id: str):
+    """Delete a specific memory point by ID"""
+    try:
+        logger.info(
+            "Deleting memory point",
+            extra={
+                "extra": {
+                    "collection": collection_name,
+                    "point_id": point_id,
+                }
+            },
+        )
+
+        # Use the collection manager to get the proper collection
+        if collection_manager.collection_exists(collection_name):
+            # Delete point using qdrant client
+            result = collection_manager.q.delete_point(collection_name, point_id)
+
+            logger.info(
+                "Memory point deleted",
+                extra={
+                    "extra": {
+                        "collection": collection_name,
+                        "point_id": point_id,
+                        "result": result,
+                    }
+                },
+            )
+
+            return DeleteResponse(
+                success=True,
+                deleted_count=1,
+                message=f"Memory point {point_id} deleted successfully",
+            )
+        else:
+            raise HTTPException(
+                status_code=404, detail=f"Collection {collection_name} not found"
+            )
+
+    except Exception as e:
+        logger.error(
+            "Failed to delete memory point",
+            extra={
+                "extra": {
+                    "collection": collection_name,
+                    "point_id": point_id,
+                    "error": str(e),
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Memory point deletion failed: {str(e)}"
+        )
+
+
+@app.delete("/memory/collection/{collection_name}")
+async def delete_memory_collection(collection_name: str, confirm: bool = False):
+    """Delete entire memory collection"""
+    try:
+        if not confirm:
+            raise HTTPException(
+                status_code=400,
+                detail="Collection deletion requires confirmation parameter: ?confirm=true",
+            )
+
+        logger.info(
+            "Deleting memory collection",
+            extra={"extra": {"collection": collection_name}},
+        )
+
+        if collection_manager.collection_exists(collection_name):
+            # Get collection info for logging
+            collection_info = collection_manager.q.get_collection_info(collection_name)
+            points_count = collection_info.get("points_count", 0)
+
+            # Delete collection
+            result = collection_manager.q.delete_collection(collection_name)
+
+            logger.info(
+                "Memory collection deleted",
+                extra={
+                    "extra": {
+                        "collection": collection_name,
+                        "points_deleted": points_count,
+                        "result": result,
+                    }
+                },
+            )
+
+            return DeleteResponse(
+                success=True,
+                deleted_count=points_count,
+                message=f"Collection {collection_name} with {points_count} points deleted successfully",
+            )
+        else:
+            raise HTTPException(
+                status_code=404, detail=f"Collection {collection_name} not found"
+            )
+
+    except Exception as e:
+        logger.error(
+            "Failed to delete memory collection",
+            extra={
+                "extra": {
+                    "collection": collection_name,
+                    "error": str(e),
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Memory collection deletion failed: {str(e)}"
+        )
+
+
+@app.post("/memory/delete/batch")
+async def batch_delete_memory_points(req: MemoryDeleteRequest):
+    """Delete multiple memory points by IDs"""
+    try:
+        logger.info(
+            "Batch deleting memory points",
+            extra={
+                "extra": {
+                    "collection": req.collection,
+                    "point_count": len(req.point_ids),
+                    "backup": req.backup,
+                }
+            },
+        )
+
+        if not collection_manager.collection_exists(req.collection):
+            raise HTTPException(
+                status_code=404, detail=f"Collection {req.collection} not found"
+            )
+
+        # Delete multiple points
+        result = collection_manager.q.delete_points(req.collection, req.point_ids)
+
+        logger.info(
+            "Batch memory points deleted",
+            extra={
+                "extra": {
+                    "collection": req.collection,
+                    "deleted_count": len(req.point_ids),
+                    "result": result,
+                }
+            },
+        )
+
+        return DeleteResponse(
+            success=True,
+            deleted_count=len(req.point_ids),
+            message=f"Successfully deleted {len(req.point_ids)} memory points",
+        )
+
+    except Exception as e:
+        logger.error(
+            "Batch memory point deletion failed",
+            extra={
+                "extra": {
+                    "collection": req.collection,
+                    "error": str(e),
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Batch memory deletion failed: {str(e)}"
+        )
+
+
+@app.post("/memory/delete/filtered")
+async def delete_filtered_memory(req: FilteredDeleteRequest):
+    """Delete memory entries matching specific criteria"""
+    try:
+        logger.info(
+            "Filtered memory deletion",
+            extra={
+                "extra": {
+                    "collection": req.collection,
+                    "filters": req.filters,
+                    "max_count": req.max_count,
+                    "backup": req.backup,
+                }
+            },
+        )
+
+        if not collection_manager.collection_exists(req.collection):
+            raise HTTPException(
+                status_code=404, detail=f"Collection {req.collection} not found"
+            )
+
+        # Use scroll to find matching points first
+        scroll_result = collection_manager.q.scroll(
+            collection=req.collection,
+            must=[req.filters],
+            limit=req.max_count,
+            with_payload=True,
+        )
+
+        points = scroll_result.get("result", {}).get("points", [])
+        point_ids = [point.get("id") for point in points if point.get("id")]
+
+        if not point_ids:
+            return DeleteResponse(
+                success=True,
+                deleted_count=0,
+                message="No memory entries matched the filter criteria",
+            )
+
+        # Delete the matching points
+        result = collection_manager.q.delete_points(req.collection, point_ids)
+
+        logger.info(
+            "Filtered memory deletion completed",
+            extra={
+                "extra": {
+                    "collection": req.collection,
+                    "deleted_count": len(point_ids),
+                    "result": result,
+                }
+            },
+        )
+
+        return DeleteResponse(
+            success=True,
+            deleted_count=len(point_ids),
+            message=f"Successfully deleted {len(point_ids)} memory entries matching criteria",
+        )
+
+    except Exception as e:
+        logger.error(
+            "Filtered memory deletion failed",
+            extra={
+                "extra": {
+                    "collection": req.collection,
+                    "error": str(e),
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Filtered memory deletion failed: {str(e)}"
+        )
+
+
 class ObjectiveAddRequest(BaseModel):
     objective: str
     project: str

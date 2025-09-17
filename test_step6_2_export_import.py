@@ -14,14 +14,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from PySide6.QtWidgets import QApplication
-from autogen_ui_clean.services.data_export_import_service import (
+from autogen_ui.services.data_export_import_service import (
     DataExportImportService,
     ExportFormat,
     DataType,
     ExportOptions,
     ImportOptions,
 )
-from autogen_ui_clean.dialogs.data_export_import_dialogs import (
+from autogen_ui.dialogs.data_export_import_dialogs import (
     show_export_dialog,
     show_import_dialog,
 )
@@ -133,7 +133,7 @@ def test_ui_integration():
 
         # Test that dialogs can be created (but not shown)
         # This tests the import and basic instantiation
-        from autogen_ui_clean.dialogs.data_export_import_dialogs import (
+        from autogen_ui.dialogs.data_export_import_dialogs import (
             ExportDialog,
             ImportDialog,
         )
