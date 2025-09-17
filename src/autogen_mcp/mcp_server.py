@@ -937,6 +937,59 @@ async def get_cross_project_analysis():
 # --- Memory Analytics Endpoints ---
 
 
+@app.get("/memory/stats")
+async def get_memory_stats():
+    """Get basic memory statistics for UI"""
+    try:
+        logger.info("Getting memory stats for UI")
+
+        # Get basic collection stats
+        stats = {}
+
+        # Get stats from Qdrant directly
+        for scope in [
+            "global",
+            "project",
+            "agent",
+            "thread",
+            "objectives",
+            "artifacts",
+        ]:
+            try:
+                collection_name = collection_manager.get_collection_name(
+                    getattr(MemoryScope, scope.upper()), None
+                )
+
+                # Get collection info from Qdrant client
+                info = memory_service.collection_manager.client.get_collection(
+                    collection_name
+                )
+
+                stats[collection_name] = {
+                    "documents_count": info.points_count,
+                    "vectors_count": info.points_count,
+                    "points_count": info.points_count,
+                    "indexed_vectors_count": info.points_count,
+                    "status": "green" if info.status == "green" else "yellow",
+                }
+            except Exception as e:
+                logger.warning(f"Failed to get stats for {scope}: {e}")
+                stats[f"autogen_{scope}"] = {
+                    "documents_count": 0,
+                    "vectors_count": 0,
+                    "points_count": 0,
+                    "indexed_vectors_count": 0,
+                    "status": "red",
+                }
+
+        logger.info("Memory stats retrieved successfully")
+        return stats
+
+    except Exception as e:
+        logger.error("Failed to get memory stats", extra={"extra": {"error": str(e)}})
+        raise HTTPException(status_code=500, detail=f"Memory stats failed: {str(e)}")
+
+
 @app.get("/memory/analytics/report")
 async def get_memory_analytics_report():
     """Get comprehensive memory analytics report"""

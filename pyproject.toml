@@ -16,6 +16,7 @@ uvicorn = {extras = ["standard"], version = "^0.35.0"}
 # UI-specific dependencies for PySide6 desktop application
 PySide6 = "^6.7.0"              # Qt6 Python bindings for desktop UI
 websockets = "^12.0"            # WebSocket client for real-time MCP server updates
+python-multipart = "^0.0.20"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
