@@ -13,6 +13,7 @@
 | **Phase 3: Session Management** | ✅ **COMPLETED** | **All Steps Done** | SessionManagerWidget with full functionality |
 | **Phase 4: Memory Management** | ✅ **COMPLETED** | **All Steps Done** | MemoryBrowserWidget with search and analytics |
 | **Phase 5: Agent Management** | ✅ **COMPLETED** | **All Steps Done** | AgentManagerWidget with presets and configuration |
+| **Phase 6: Advanced Features** | ✅ **PARTIALLY COMPLETED** | **Step 6.4 Done** | Memory file upload with MD processing |
 
 ### 🎯 **Key Achievements**:
 - ✅ **Complete UI Foundation**: Clean autogen_ui_clean architecture implemented
@@ -21,6 +22,7 @@
 - ✅ **Memory Integration Complete**: Direct MCP server integration with 603 indexed entries
 - ✅ **Agent Management**: Complete agent configuration with presets (Code Assistant, Data Analyst, etc.)
 - ✅ **Session Management**: Full session lifecycle with conversation history
+- ✅ **Memory File Upload**: NEW - Markdown file processing with intelligent chunking
 - ✅ **Production-Ready Performance**: Sub-200ms response times validated
 - ✅ **Comprehensive Testing**: 100% success rate across 3 testing phases
 - ✅ **Real-World Validation**: 4/4 professional user scenarios successful
@@ -51,13 +53,16 @@
 - **main_window.py**: Professional main window with tabbed interface and splitter layout
 
 **✅ Complete Widget System (widgets/)**:
-- **MemoryBrowserWidget**: Full memory management with search, analytics, and collection browser
+- **MemoryBrowserWidget**: Full memory management with search, analytics, collection browser, AND file upload capabilities
 - **AgentManagerWidget**: Complete agent system with 4 presets (Code Assistant, Data Analyst, Content Writer, Research Assistant)
 - **SessionManagerWidget**: Full session lifecycle with conversation history and management
 
 **✅ Additional Components Beyond Plan**:
 - **ServerWidget**: Real-time server connection monitoring (built into main_window.py)
 - **ConversationWidget**: Live conversation interface with message input
+- **Professional Styling**: Clean, modern Qt6 interface design
+- **Status Integration**: Real-time status updates throughout the application
+- **File Upload System**: NEW - Markdown file processing and memory integration
 - **Professional Styling**: Clean, modern Qt6 interface design
 - **Status Integration**: Real-time status updates throughout the application
 
@@ -1578,6 +1583,67 @@ class MemoryService(BaseService):
 - [ ] Plugin API enables custom functionality
 - [ ] Plugin security prevents malicious code
 - [ ] Plugin marketplace facilitates discovery
+
+### Step 6.4: Memory File Management ✅ **COMPLETED**
+**Duration**: 3-4 hours (completed)
+**Testing**: MD files can be uploaded and processed into memory ✅
+**Git Workflow**:
+- Branch: `feature/memory-file-upload` ✅ **COMPLETED**
+- All changes implemented and ready for commit ✅
+
+**✅ Implemented Features**:
+1. ✅ **MCP Server File Upload Endpoint**: New `/memory/upload` endpoint with multipart file support
+2. ✅ **Markdown File Processing**: Smart chunking by sections and paragraphs with metadata
+3. ✅ **Memory Browser File Upload Tab**: Complete UI with file selection, progress tracking, and status updates
+4. ✅ **Multi-scope Integration**: Support for project, global, and artifacts memory scopes
+5. ✅ **Intelligent Chunking**: Section-based splitting with proper metadata preservation
+6. ✅ **Real-time Feedback**: Progress indicators and detailed upload status reporting
+
+**✅ Technical Implementation**:
+
+**MCP Server Enhancements**:
+- **File Upload Endpoint**: `POST /memory/upload` with FastAPI UploadFile support
+- **Markdown Chunking**: Intelligent parsing by headers (##) with 1500-char limit per chunk
+- **Metadata Enrichment**: Filename, section titles, upload date, chunk indexing
+- **Error Handling**: Comprehensive validation and error reporting
+- **Memory Integration**: Direct integration with MultiScopeMemoryService
+
+**UI Enhancements**:
+- **Upload Tab**: New dedicated tab in MemoryBrowserWidget
+- **File Selection**: Native file dialog with .md filter
+- **Upload Controls**: Project/scope selection with validation
+- **Progress Tracking**: Real-time progress bar and status updates
+- **Success Feedback**: Detailed completion reports with chunk statistics
+
+**Chunking Strategy**:
+```python
+def chunk_markdown_content(content: str, filename: str) -> List[dict]:
+    # Split by markdown headers (## sections)
+    sections = re.split(r'\n(?=#{1,3}\s)', content)
+
+    # Further split large sections by paragraphs
+    # Max 1500 characters per chunk with metadata
+    # Include: filename, section_title, chunk_index, upload_date
+```
+
+**Acceptance Criteria**: ✅ **ALL MET**
+- [x] **MD files can be uploaded** via intuitive file selection interface
+- [x] **Files are intelligently chunked** by sections and paragraphs with proper metadata
+- [x] **Multiple memory scopes supported** (project, global, artifacts)
+- [x] **Upload progress is tracked** with real-time feedback and status updates
+- [x] **Error handling is comprehensive** with detailed error messages and recovery
+- [x] **Memory integration is seamless** with immediate searchability of uploaded content
+- [x] **Success feedback is detailed** showing filename, chunks processed, and status
+- [x] **File validation prevents issues** with proper .md extension checking
+- [x] **MCP server integration works** with proper endpoint and data flow
+- [x] **UI is professional and intuitive** matching the overall application design
+
+**📊 Usage Example**:
+1. **Select File**: Browse and select .md file via Upload tab
+2. **Configure Settings**: Choose project name and memory scope
+3. **Upload**: Click "Upload to Memory" with real-time progress tracking
+4. **Success**: View detailed completion report with chunk statistics
+5. **Search**: Immediately search and find uploaded content in memory
 
 ## Phase 7: Testing and Quality Assurance
 
