@@ -5,7 +5,7 @@ import uuid
 import json
 import re
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
@@ -107,6 +107,7 @@ class OrchestrateRequest(BaseModel):
     project: str
     agents: list[str]
     objective: str
+    working_directory: Optional[str] = None
 
 
 class OrchestrateResponse(BaseModel):
@@ -118,6 +119,7 @@ class SessionInfo(BaseModel):
     session_id: str
     project: str
     objective: str
+    working_directory: Optional[str] = None
     status: str
     agents: list[str]
     created_at: str
@@ -137,11 +139,26 @@ async def start_orchestration(req: OrchestrateRequest):
                     "project": req.project,
                     "agents": req.agents,
                     "objective": req.objective,
+                    "working_directory": req.working_directory,
                 }
             },
         )
 
         session_id = str(uuid.uuid4())
+
+        # Determine working directory for this session
+        working_dir = req.working_directory or os.getenv("MCP_WORKSPACE", os.getcwd())
+
+        # Validate and create working directory if needed
+        if not os.path.exists(working_dir):
+            try:
+                os.makedirs(working_dir, exist_ok=True)
+                logger.info(f"Created working directory: {working_dir}")
+            except Exception as e:
+                logger.error(f"Failed to create working directory {working_dir}: {e}")
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid working directory: {working_dir}"
+                )
 
         # Configure agent configs based on request
         agent_configs = [
@@ -161,11 +178,12 @@ async def start_orchestration(req: OrchestrateRequest):
         # Start the session with the objective
         orchestrator.start_session(req.objective)
 
-        # Store session
+        # Store session with working directory
         active_sessions[session_id] = {
             "orchestrator": orchestrator,
             "project": req.project,
             "objective": req.objective,
+            "working_directory": working_dir,
             "status": "active",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -308,6 +326,7 @@ async def list_sessions():
                 session_id=session_id,
                 project=session_data.get("project", "unknown"),
                 objective=session_data.get("objective", ""),
+                working_directory=session_data.get("working_directory"),
                 status=session_data.get("status", "unknown"),
                 agents=agent_roles,
                 created_at=session_data.get(

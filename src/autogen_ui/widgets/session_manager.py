@@ -3,6 +3,7 @@ Session Management Widget - Clean Implementation
 Manage AutoGen conversation sessions and history
 """
 
+import os
 import logging
 from datetime import datetime
 from typing import Dict, Any
@@ -27,9 +28,12 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QTreeWidget,
     QTreeWidgetItem,
+    QFileDialog,
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
+
+from autogen_ui.services import SessionService
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +164,9 @@ class ConversationViewer(QWidget):
 class SessionConfigWidget(QWidget):
     """Widget for configuring session settings"""
 
+    # Signal for when user wants to start a session
+    session_start_requested = Signal(dict)
+
     def __init__(self):
         super().__init__()
         self.setup_ui()
@@ -204,6 +211,21 @@ class SessionConfigWidget(QWidget):
             ["Chat", "Code Review", "Planning", "Research", "Custom"]
         )
         basic_layout.addRow("Session Type:", self.session_type)
+
+        # Working directory selection
+        working_dir_layout = QHBoxLayout()
+        self.working_directory = QLineEdit()
+        self.working_directory.setPlaceholderText("Select working directory...")
+        import os
+
+        self.working_directory.setText(os.getcwd())  # Default to current directory
+        working_dir_layout.addWidget(self.working_directory)
+
+        self.browse_dir_btn = QPushButton("Browse...")
+        self.browse_dir_btn.clicked.connect(self.browse_working_directory)
+        working_dir_layout.addWidget(self.browse_dir_btn)
+
+        basic_layout.addRow("Working Directory:", working_dir_layout)
 
         self.max_rounds = QSpinBox()
         self.max_rounds.setRange(1, 100)
@@ -296,18 +318,30 @@ class SessionConfigWidget(QWidget):
         if current_item:
             self.agents_list.takeItem(self.agents_list.row(current_item))
 
+    def browse_working_directory(self):
+        """Browse for working directory"""
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Working Directory",
+            self.working_directory.text() or os.getcwd(),
+        )
+        if directory:
+            self.working_directory.setText(directory)
+
     def start_session(self):
         """Start a new session"""
         if not self.session_name.text().strip():
             QMessageBox.warning(self, "Warning", "Please enter a session name")
             return
 
+        if not self.working_directory.text().strip():
+            QMessageBox.warning(self, "Warning", "Please select a working directory")
+            return
+
         config = self.get_session_config()
-        QMessageBox.information(
-            self,
-            "Session Started",
-            f"Started session '{config['name']}' with {len(config['agents'])} agents",
-        )
+
+        # Emit signal for the manager to handle
+        self.session_start_requested.emit(config)
 
     def save_config(self):
         """Save session configuration"""
@@ -337,6 +371,7 @@ class SessionConfigWidget(QWidget):
             "type": self.session_type.currentText(),
             "max_rounds": self.max_rounds.value(),
             "agents": agents,
+            "working_directory": self.working_directory.text().strip(),
             "memory_enabled": self.memory_enabled.isChecked(),
             "auto_save": self.auto_save.isChecked(),
             "timeout": self.timeout.value(),
@@ -355,6 +390,12 @@ class SessionManagerWidget(QWidget):
         self.server_url = server_url
         self.current_session = None
         self.sessions_history = []
+
+        # Initialize session service
+        self.session_service = SessionService(server_url)
+        self.session_service.session_started.connect(self._on_session_started)
+        self.session_service.session_stopped.connect(self._on_session_stopped)
+        self.session_service.session_error.connect(self._on_session_error)
 
         self.setup_ui()
         self.setup_timer()
@@ -419,6 +460,9 @@ class SessionManagerWidget(QWidget):
         self.current_type_label = QLabel("None")
         info_layout.addRow("Type:", self.current_type_label)
 
+        self.current_directory_label = QLabel("None")
+        info_layout.addRow("Directory:", self.current_directory_label)
+
         self.current_agents_label = QLabel("None")
         info_layout.addRow("Agents:", self.current_agents_label)
 
@@ -436,6 +480,9 @@ class SessionManagerWidget(QWidget):
     def setup_new_session_tab(self):
         """Set up new session tab"""
         self.session_config = SessionConfigWidget()
+        self.session_config.session_start_requested.connect(
+            self._handle_session_start_request
+        )
         self.tab_widget.addTab(self.session_config, "New Session")
 
     def setup_history_tab(self):
@@ -528,6 +575,9 @@ class SessionManagerWidget(QWidget):
         self.current_session = config
         self.current_name_label.setText(config["name"])
         self.current_type_label.setText(config["type"])
+        self.current_directory_label.setText(
+            config.get("working_directory", "Not specified")
+        )
         self.current_agents_label.setText(", ".join(config["agents"]))
         self.current_rounds_label.setText(f"0/{config['max_rounds']}")
 
@@ -574,6 +624,7 @@ class SessionManagerWidget(QWidget):
             # Clear current session display
             self.current_name_label.setText("None")
             self.current_type_label.setText("None")
+            self.current_directory_label.setText("None")
             self.current_agents_label.setText("None")
             self.current_rounds_label.setText("0/0")
 
@@ -592,3 +643,59 @@ class SessionManagerWidget(QWidget):
         if reply == QMessageBox.Yes:
             self.history_tree.clear()
             self.sessions_history.clear()
+
+    def _handle_session_start_request(self, config: dict):
+        """Handle session start request from config widget"""
+        try:
+            # Extract session parameters
+            project_name = config.get("name", "Unnamed Project")
+            agents = config.get("agents", ["assistant"])
+            objective = f"{config.get('type', 'Chat')} session for {project_name}"
+            working_directory = config.get("working_directory")
+
+            # For now, show the config that would be sent to the API
+            QMessageBox.information(
+                self,
+                "Session Configuration",
+                f"Project: {project_name}\n"
+                f"Agents: {', '.join(agents)}\n"
+                f"Objective: {objective}\n"
+                f"Working Directory: {working_directory or 'default'}\n\n"
+                f"Session would be started with these parameters.",
+            )
+
+            # TODO: Implement proper async session start
+            # This requires proper async integration with Qt
+
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Session Start Error", f"Failed to start session: {str(e)}"
+            )
+
+    def _on_session_started(self, session_id: str, session_info: dict):
+        """Handle session started signal"""
+        logger.info(f"Session {session_id} started: {session_info}")
+        # Update UI to show active session
+        if session_info:
+            self.current_session = session_info
+            self.current_name_label.setText(session_info.get("project", "Unknown"))
+            self.status_label.setText(
+                f"Active: {session_info.get('project', 'Unknown')}"
+            )
+            self.status_label.setStyleSheet(
+                "QLabel { color: green; font-weight: bold; padding: 4px; }"
+            )
+
+    def _on_session_stopped(self, session_id: str):
+        """Handle session stopped signal"""
+        logger.info(f"Session {session_id} stopped")
+        self.current_session = None
+        self.status_label.setText("No active session")
+        self.status_label.setStyleSheet(
+            "QLabel { color: gray; font-style: italic; padding: 4px; }"
+        )
+
+    def _on_session_error(self, session_id: str, error_message: str):
+        """Handle session error signal"""
+        logger.error(f"Session {session_id} error: {error_message}")
+        QMessageBox.critical(self, "Session Error", f"Session error: {error_message}")
