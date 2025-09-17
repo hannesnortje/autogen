@@ -24,6 +24,9 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QTextCursor
 
 from .widgets import MemoryBrowserWidget, AgentManagerWidget, SessionManagerWidget
+from .widgets.notification_panel import NotificationPanel
+from .services.realtime_service import RealtimeService
+from .services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -195,10 +198,19 @@ class AutoGenMainWindow(QMainWindow):
         self.resize(geometry["width"], geometry["height"])
         self.setMinimumSize(800, 600)
 
+        # Initialize services
+        self.setup_services()
+
         # Set up UI
         self.setup_menu()
         self.setup_central_widget()
         self.setup_status_bar()
+
+        # Set up notification panel after services
+        self.setup_notification_panel()
+
+        # Connect real-time updates
+        self.connect_realtime_services()
 
         logger.info("AutoGen main window initialized successfully")
 
@@ -220,6 +232,13 @@ class AutoGenMainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # Settings menu
+        settings_menu = menubar.addMenu("&Settings")
+
+        notifications_action = QAction("&Notifications...", self)
+        notifications_action.triggered.connect(self.show_notification_preferences)
+        settings_menu.addAction(notifications_action)
+
         # Help menu
         help_menu = menubar.addMenu("&Help")
 
@@ -232,8 +251,8 @@ class AutoGenMainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # Main horizontal splitter
-        splitter = QSplitter(Qt.Horizontal)
+        # Main horizontal splitter (three panels)
+        main_splitter = QSplitter(Qt.Horizontal)
 
         # Left side - Server and Memory Browser
         left_widget = QTabWidget()
@@ -246,9 +265,9 @@ class AutoGenMainWindow(QMainWindow):
         left_widget.addTab(self.server_widget, "Server")
 
         # Memory Browser tab
-        server_url = (
-            f"http://{self.config['server']['host']}:{self.config['server']['port']}"
-        )
+        server_host = self.config["server"]["host"]
+        server_port = self.config["server"]["port"]
+        server_url = f"http://{server_host}:{server_port}"
         self.memory_browser = MemoryBrowserWidget(server_url)
         left_widget.addTab(self.memory_browser, "Memory")
 
@@ -260,19 +279,43 @@ class AutoGenMainWindow(QMainWindow):
         self.session_manager = SessionManagerWidget(server_url)
         left_widget.addTab(self.session_manager, "Sessions")
 
-        # Right side - Conversation
+        # Middle - Conversation
         self.conversation_widget = ConversationWidget()
 
-        # Add to splitter
-        splitter.addWidget(left_widget)
-        splitter.addWidget(self.conversation_widget)
+        # Right side - Notifications panel
+        # (Will be initialized after services are set up)
+        self.notification_panel_placeholder = QWidget()
 
-        # Set splitter proportions (40% left, 60% right)
-        splitter.setSizes([400, 600])
+        # Add to main splitter
+        main_splitter.addWidget(left_widget)
+        main_splitter.addWidget(self.conversation_widget)
+        main_splitter.addWidget(self.notification_panel_placeholder)
 
-        # Add splitter to central widget
+        # Set splitter proportions (30% left, 50% middle, 20% right)
+        main_splitter.setSizes([300, 500, 200])
+
+        # Add main splitter to central widget
         layout = QHBoxLayout(central_widget)
-        layout.addWidget(splitter)
+        layout.addWidget(main_splitter)
+
+    def setup_notification_panel(self):
+        """Set up the notification panel after services are initialized"""
+        if hasattr(self, "notification_service"):
+            self.notification_panel = NotificationPanel(self.notification_service)
+
+            # Replace placeholder with actual notification panel
+            parent_splitter = self.notification_panel_placeholder.parent()
+            if parent_splitter:
+                # Get the index of the placeholder
+                for i in range(parent_splitter.count()):
+                    if (
+                        parent_splitter.widget(i) == self.notification_panel_placeholder
+                    ):  # noqa
+                        # Remove placeholder
+                        self.notification_panel_placeholder.deleteLater()
+                        # Insert notification panel at the same position
+                        parent_splitter.insertWidget(i, self.notification_panel)
+                        break
 
     def setup_status_bar(self):
         """Set up status bar"""
@@ -299,7 +342,87 @@ class AutoGenMainWindow(QMainWindow):
             "Built with PySide6 and designed for stability.",
         )
 
+    def setup_services(self):
+        """Initialize real-time and notification services"""
+        server_config = self.config["server"]
+        ws_url = f"ws://{server_config['host']}:{server_config['port']}"
+
+        # Initialize services
+        self.realtime_service = RealtimeService(ws_url)
+        self.notification_service = NotificationService(self)
+
+        logger.info("Services initialized successfully")
+
+    def connect_realtime_services(self):
+        """Connect real-time service signals to UI updates"""
+        # Connect realtime service to notification service
+        self.realtime_service.notification_received.connect(
+            self.notification_service.show_notification
+        )
+
+        # Connect session updates
+        self.realtime_service.session_updated.connect(self.on_session_updated)
+
+        # Connect memory updates
+        self.realtime_service.memory_updated.connect(self.on_memory_updated)
+
+        # Connect agent status changes
+        self.realtime_service.agent_status_changed.connect(self.on_agent_status_changed)
+
+        # Connect server status changes
+        self.realtime_service.server_status_changed.connect(
+            self.on_server_status_changed
+        )
+
+        logger.info("Real-time service connections established")
+
+    def on_session_updated(self, session_id: str, update_data: dict):
+        """Handle session update events"""
+        if hasattr(self, "session_manager"):
+            # Update session manager if available
+            self.session_manager.refresh_sessions()
+
+        # Update status bar with session status
+        status = update_data.get("status", "unknown")
+        self.status_bar.showMessage(f"Session {session_id}: {status}")
+
+    def on_memory_updated(self, scope: str, update_data: dict):
+        """Handle memory update events"""
+        if hasattr(self, "memory_browser"):
+            # Refresh memory browser
+            self.memory_browser.refresh_memory()
+
+    def on_agent_status_changed(self, agent_id: str, status_data: dict):
+        """Handle agent status change events"""
+        if hasattr(self, "agent_manager"):
+            # Update agent manager if available
+            pass  # Agent manager can implement refresh if needed
+
+    def on_server_status_changed(self, status_data: dict):
+        """Handle server status change events"""
+        server_status = status_data.get("status", "unknown")
+        self.status_bar.showMessage(f"Server status: {server_status}")
+
+    def connect_to_session(self, session_id: str):
+        """Connect to a specific session for real-time updates"""
+        self.realtime_service.connect_to_session(session_id)
+        log_msg = f"Connected to real-time updates for session: {session_id}"
+        logger.info(log_msg)
+
+    def disconnect_from_session(self, session_id: str):
+        """Disconnect from session real-time updates"""
+        self.realtime_service.disconnect_from_session(session_id)
+        logger.info(f"Disconnected from session: {session_id}")
+
+    def show_notification_preferences(self):
+        """Show notification preferences dialog"""
+        self.notification_service.show_preferences_dialog()
+
     def closeEvent(self, event):
         """Handle window close event"""
+        # Clean up services
+        if hasattr(self, "realtime_service"):
+            self.realtime_service.disconnect_all()
+
         logger.info("AutoGen main window closing")
         super().closeEvent(event)
