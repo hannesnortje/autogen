@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QFrame,
     QMessageBox,
     QCheckBox,
+    QFileDialog,
+    QProgressBar,
 )
 from PySide6.QtCore import QTimer, Signal, QThread
 from PySide6.QtGui import QFont
@@ -38,6 +40,7 @@ class MemoryWorker(QThread):
     search_completed = Signal(list)
     stats_completed = Signal(dict)
     collections_completed = Signal(list)
+    upload_completed = Signal(dict)
     error_occurred = Signal(str)
 
     def __init__(self, server_url: str):
@@ -64,6 +67,12 @@ class MemoryWorker(QThread):
         self.params = {}
         self.start()
 
+    def upload_file(self, file_path: str, project: str, scope: str):
+        """Upload file to memory"""
+        self.operation = "upload"
+        self.params = {"file_path": file_path, "project": project, "scope": scope}
+        self.start()
+
     def run(self):
         """Execute the operation"""
         try:
@@ -73,6 +82,8 @@ class MemoryWorker(QThread):
                 self._get_stats()
             elif self.operation == "collections":
                 self._get_collections()
+            elif self.operation == "upload":
+                self._upload_file()
         except Exception as e:
             self.error_occurred.emit(str(e))
 
@@ -119,6 +130,40 @@ class MemoryWorker(QThread):
                 self.error_occurred.emit(f"Collections failed: {response.status_code}")
         except requests.RequestException as e:
             self.error_occurred.emit(f"Collections request failed: {e}")
+
+    def _upload_file(self):
+        """Upload file to memory"""
+        try:
+            file_path = self.params["file_path"]
+            project = self.params["project"]
+            scope = self.params["scope"]
+
+            # Read file content
+            with open(file_path, "rb") as f:
+                files = {"file": (file_path.split("/")[-1], f, "text/markdown")}
+                data = {"project": project, "scope": scope}
+
+                response = requests.post(
+                    f"{self.server_url}/memory/upload",
+                    files=files,
+                    data=data,
+                    timeout=60,  # Longer timeout for file upload
+                )
+
+            if response.status_code == 200:
+                result = response.json()
+                self.upload_completed.emit(result)
+            else:
+                self.error_occurred.emit(
+                    f"Upload failed: {response.status_code} - {response.text}"
+                )
+
+        except requests.RequestException as e:
+            self.error_occurred.emit(f"Upload request failed: {e}")
+        except FileNotFoundError:
+            self.error_occurred.emit(f"File not found: {file_path}")
+        except Exception as e:
+            self.error_occurred.emit(f"Upload error: {e}")
 
 
 class MemoryBrowserWidget(QWidget):
@@ -226,6 +271,9 @@ class MemoryBrowserWidget(QWidget):
         # Results tab
         self.setup_results_tab()
 
+        # Upload tab - NEW
+        self.setup_upload_tab()
+
         # Statistics tab
         self.setup_statistics_tab()
 
@@ -278,6 +326,99 @@ class MemoryBrowserWidget(QWidget):
 
         self.tab_widget.addTab(results_widget, "Search Results")
 
+    def setup_upload_tab(self):
+        """Set up file upload tab"""
+        upload_widget = QWidget()
+        upload_layout = QVBoxLayout(upload_widget)
+
+        # Upload instructions
+        instructions_group = QGroupBox("File Upload Instructions")
+        instructions_layout = QVBoxLayout(instructions_group)
+
+        instructions_text = QTextEdit()
+        instructions_text.setReadOnly(True)
+        instructions_text.setMaximumHeight(100)
+        instructions_text.setHtml(
+            """
+        <b>Upload Markdown Files to Memory</b><br>
+        • Select .md files to add to the knowledge base<br>
+        • Files will be chunked and indexed for search<br>
+        • Choose appropriate project and scope settings
+        """
+        )
+        instructions_layout.addWidget(instructions_text)
+        upload_layout.addWidget(instructions_group)
+
+        # File selection
+        file_group = QGroupBox("File Selection")
+        file_layout = QVBoxLayout(file_group)
+
+        # File path display
+        file_path_layout = QHBoxLayout()
+        self.file_path_label = QLabel("No file selected")
+        self.file_path_label.setStyleSheet("color: gray; font-style: italic;")
+        file_path_layout.addWidget(QLabel("Selected File:"))
+        file_path_layout.addWidget(self.file_path_label, 1)
+
+        self.browse_btn = QPushButton("Browse Files...")
+        self.browse_btn.clicked.connect(self.browse_files)
+        file_path_layout.addWidget(self.browse_btn)
+
+        file_layout.addLayout(file_path_layout)
+        upload_layout.addWidget(file_group)
+
+        # Upload settings
+        settings_group = QGroupBox("Upload Settings")
+        settings_layout = QHBoxLayout(settings_group)
+
+        settings_layout.addWidget(QLabel("Project:"))
+        self.project_input = QLineEdit("default")
+        self.project_input.setPlaceholderText("Enter project name")
+        settings_layout.addWidget(self.project_input)
+
+        settings_layout.addWidget(QLabel("Scope:"))
+        self.scope_combo = QComboBox()
+        self.scope_combo.addItems(["project", "global", "artifacts"])
+        settings_layout.addWidget(self.scope_combo)
+
+        upload_layout.addWidget(settings_group)
+
+        # Upload controls
+        controls_layout = QHBoxLayout()
+
+        self.upload_btn = QPushButton("Upload to Memory")
+        self.upload_btn.setEnabled(False)
+        self.upload_btn.clicked.connect(self.upload_file)
+        controls_layout.addWidget(self.upload_btn)
+
+        controls_layout.addStretch()
+
+        self.clear_selection_btn = QPushButton("Clear Selection")
+        self.clear_selection_btn.clicked.connect(self.clear_file_selection)
+        controls_layout.addWidget(self.clear_selection_btn)
+
+        upload_layout.addLayout(controls_layout)
+
+        # Upload progress
+        progress_group = QGroupBox("Upload Progress")
+        progress_layout = QVBoxLayout(progress_group)
+
+        self.upload_progress = QProgressBar()
+        self.upload_progress.setVisible(False)
+        progress_layout.addWidget(self.upload_progress)
+
+        self.upload_status = QTextEdit()
+        self.upload_status.setReadOnly(True)
+        self.upload_status.setMaximumHeight(100)
+        self.upload_status.setPlaceholderText("Upload status will appear here...")
+        progress_layout.addWidget(self.upload_status)
+
+        upload_layout.addWidget(progress_group)
+
+        upload_layout.addStretch()
+
+        self.tab_widget.addTab(upload_widget, "Upload Files")
+
     def setup_statistics_tab(self):
         """Set up memory statistics tab"""
         stats_widget = QWidget()
@@ -326,6 +467,7 @@ class MemoryBrowserWidget(QWidget):
         self.worker.search_completed.connect(self.on_search_completed)
         self.worker.stats_completed.connect(self.on_stats_completed)
         self.worker.collections_completed.connect(self.on_collections_completed)
+        self.worker.upload_completed.connect(self.on_upload_completed)
         self.worker.error_occurred.connect(self.on_error_occurred)
 
         # Auto-search
@@ -477,6 +619,12 @@ class MemoryBrowserWidget(QWidget):
         # Show error in stats tab
         self.stats_text.setPlainText(f"Error: {error}")
 
+        # Handle upload errors
+        if hasattr(self, "upload_progress"):
+            self.upload_progress.setVisible(False)
+            self.upload_btn.setEnabled(True)
+            self.upload_status.append(f"❌ ERROR: {error}")
+
         logger.error(f"Memory browser error: {error}")
 
     def on_result_selected(self):
@@ -504,3 +652,68 @@ class MemoryBrowserWidget(QWidget):
 
             # Emit signal for external handling
             self.memory_selected.emit(result)
+
+    def browse_files(self):
+        """Open file dialog to select markdown files"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Select Markdown File", "", "Markdown files (*.md);;All files (*.*)"
+        )
+
+        if file_path:
+            self.file_path_label.setText(file_path)
+            self.file_path_label.setStyleSheet("color: black;")
+            self.upload_btn.setEnabled(True)
+            self.selected_file_path = file_path
+
+    def clear_file_selection(self):
+        """Clear the selected file"""
+        self.file_path_label.setText("No file selected")
+        self.file_path_label.setStyleSheet("color: gray; font-style: italic;")
+        self.upload_btn.setEnabled(False)
+        self.selected_file_path = None
+        self.upload_status.clear()
+
+    def upload_file(self):
+        """Upload the selected file to memory"""
+        if not hasattr(self, "selected_file_path") or not self.selected_file_path:
+            QMessageBox.warning(self, "Warning", "Please select a file first")
+            return
+
+        project = self.project_input.text().strip() or "default"
+        scope = self.scope_combo.currentText()
+
+        # Show progress
+        self.upload_progress.setVisible(True)
+        self.upload_progress.setRange(0, 0)  # Indeterminate progress
+        self.upload_btn.setEnabled(False)
+
+        # Add status message
+        self.upload_status.append(f"Uploading {self.selected_file_path}...")
+        self.upload_status.append(f"Project: {project}, Scope: {scope}")
+
+        # Start upload
+        self.worker.upload_file(self.selected_file_path, project, scope)
+
+    def on_upload_completed(self, result: dict):
+        """Handle upload completion"""
+        self.upload_progress.setVisible(False)
+        self.upload_btn.setEnabled(True)
+
+        # Show success message
+        filename = result.get("filename", "Unknown")
+        chunks = result.get("chunks_processed", 0)
+        message = result.get("message", "Upload completed")
+
+        self.upload_status.append(f"✅ SUCCESS: {message}")
+        self.upload_status.append(f"📄 File: {filename}")
+        self.upload_status.append(f"📝 Chunks processed: {chunks}")
+
+        # Show success dialog
+        QMessageBox.information(
+            self,
+            "Upload Successful",
+            f"Successfully uploaded {filename}\nProcessed {chunks} chunks\n\n{message}",
+        )
+
+        # Refresh data to show updated statistics
+        self.refresh_data()

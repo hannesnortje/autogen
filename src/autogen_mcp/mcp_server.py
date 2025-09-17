@@ -3,10 +3,18 @@ import asyncio
 from datetime import datetime, timezone
 import uuid
 import json
+import re
 from pathlib import Path
 from typing import List
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    UploadFile,
+    File,
+)
 from pydantic import BaseModel
 
 from autogen_mcp.multi_memory import MultiScopeMemoryService
@@ -446,6 +454,256 @@ async def objective_add(req: ObjectiveAddRequest):
         raise HTTPException(status_code=500, detail=f"Add objective failed: {str(e)}")
 
 
+# --- Memory File Upload Endpoint ---
+
+
+def chunk_markdown_content(content: str, filename: str) -> List[dict]:
+    """
+    Chunk markdown content into meaningful sections.
+
+    Args:
+        content: The markdown content to chunk
+        filename: Name of the source file
+
+    Returns:
+        List of chunks with metadata
+    """
+    chunks = []
+
+    # Split by markdown headers (## sections)
+    sections = re.split(r"\n(?=#{1,3}\s)", content)
+
+    for i, section in enumerate(sections):
+        if not section.strip():
+            continue
+
+        # Extract section title if it exists
+        title_match = re.match(r"^(#{1,3})\s+(.+?)(?:\n|$)", section)
+        title = title_match.group(2) if title_match else f"Section {i + 1}"
+
+        # Split section into smaller chunks if it's too long (>2000 chars)
+        if len(section) > 2000:
+            # Split by paragraphs (double newlines)
+            paragraphs = section.split("\n\n")
+
+            current_chunk = ""
+            chunk_index = 0
+
+            for paragraph in paragraphs:
+                if len(current_chunk + paragraph) > 1500 and current_chunk:
+                    # Save current chunk
+                    chunks.append(
+                        {
+                            "content": current_chunk.strip(),
+                            "metadata": {
+                                "filename": filename,
+                                "section_title": title,
+                                "chunk_index": chunk_index,
+                                "total_sections": len(sections),
+                                "type": "markdown_chunk",
+                                "upload_date": datetime.now(timezone.utc).isoformat(),
+                            },
+                        }
+                    )
+                    current_chunk = paragraph
+                    chunk_index += 1
+                else:
+                    if current_chunk:
+                        current_chunk += f"\n\n{paragraph}"
+                    else:
+                        current_chunk = paragraph
+
+            # Add final chunk if there's remaining content
+            if current_chunk.strip():
+                chunks.append(
+                    {
+                        "content": current_chunk.strip(),
+                        "metadata": {
+                            "filename": filename,
+                            "section_title": title,
+                            "chunk_index": chunk_index,
+                            "total_sections": len(sections),
+                            "type": "markdown_chunk",
+                            "upload_date": datetime.now(timezone.utc).isoformat(),
+                        },
+                    }
+                )
+        else:
+            # Section is small enough, use as single chunk
+            chunks.append(
+                {
+                    "content": section.strip(),
+                    "metadata": {
+                        "filename": filename,
+                        "section_title": title,
+                        "chunk_index": i,
+                        "total_sections": len(sections),
+                        "type": "markdown_chunk",
+                        "upload_date": datetime.now(timezone.utc).isoformat(),
+                    },
+                }
+            )
+
+    return chunks
+
+
+class FileUploadResponse(BaseModel):
+    status: str
+    filename: str
+    chunks_processed: int
+    total_size: int
+    message: str
+
+
+@app.post("/memory/upload", response_model=FileUploadResponse)
+async def upload_file_to_memory(
+    file: UploadFile = File(...), project: str = "default", scope: str = "project"
+):
+    """
+    Upload and process a markdown file into memory.
+
+    Args:
+        file: The uploaded file (must be .md extension)
+        project: Project context for the file
+        scope: Memory scope (project, global, etc.)
+
+    Returns:
+        Upload status and processing details
+    """
+    try:
+        # Validate file type
+        if not file.filename.endswith(".md"):
+            raise HTTPException(
+                status_code=400, detail="Only markdown (.md) files are supported"
+            )
+
+        # Read file content
+        content = await file.read()
+        content_str = content.decode("utf-8")
+
+        logger.info(
+            "Processing uploaded file",
+            extra={
+                "extra": {
+                    "filename": file.filename,
+                    "size": len(content),
+                    "project": project,
+                    "scope": scope,
+                }
+            },
+        )
+
+        # Chunk the content
+        chunks = chunk_markdown_content(content_str, file.filename)
+
+        if not chunks:
+            raise HTTPException(
+                status_code=400, detail="No content could be extracted from the file"
+            )
+
+        # Map scope to memory scope enum
+        scope_mapping = {
+            "global": MemoryScope.GLOBAL,
+            "project": MemoryScope.PROJECT,
+            "agent": MemoryScope.AGENT,
+            "thread": MemoryScope.THREAD,
+            "objectives": MemoryScope.OBJECTIVES,
+            "artifacts": MemoryScope.ARTIFACTS,
+        }
+
+        memory_scope = scope_mapping.get(scope.lower(), MemoryScope.PROJECT)
+
+        # Set project context
+        memory_service.set_project(project)
+
+        # Process each chunk
+        processed_count = 0
+        thread_id = f"upload_{project}_{uuid.uuid4().hex[:8]}"
+
+        for chunk in chunks:
+            try:
+                # Write chunk to appropriate memory scope
+                if memory_scope == MemoryScope.GLOBAL:
+                    memory_service.write_global(
+                        thread_id=thread_id,
+                        text=chunk["content"],
+                        metadata=chunk["metadata"],
+                    )
+                elif memory_scope == MemoryScope.PROJECT:
+                    memory_service.write_project(
+                        thread_id=thread_id,
+                        text=chunk["content"],
+                        metadata=chunk["metadata"],
+                    )
+                elif memory_scope == MemoryScope.ARTIFACTS:
+                    memory_service.write_artifacts(
+                        thread_id=thread_id,
+                        text=chunk["content"],
+                        metadata=chunk["metadata"],
+                    )
+                else:
+                    # Default to project scope
+                    memory_service.write_project(
+                        thread_id=thread_id,
+                        text=chunk["content"],
+                        metadata=chunk["metadata"],
+                    )
+
+                processed_count += 1
+
+            except Exception as chunk_error:
+                logger.warning(
+                    "Failed to process chunk",
+                    extra={
+                        "extra": {
+                            "filename": file.filename,
+                            "chunk_index": chunk.get("metadata", {}).get(
+                                "chunk_index", 0
+                            ),
+                            "error": str(chunk_error),
+                        }
+                    },
+                )
+
+        logger.info(
+            "File upload completed",
+            extra={
+                "extra": {
+                    "filename": file.filename,
+                    "chunks_processed": processed_count,
+                    "total_chunks": len(chunks),
+                    "project": project,
+                    "scope": scope,
+                }
+            },
+        )
+
+        return FileUploadResponse(
+            status="success",
+            filename=file.filename,
+            chunks_processed=processed_count,
+            total_size=len(content),
+            message=(
+                f"Successfully processed {processed_count} chunks from {file.filename}"
+            ),
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(
+            "File upload failed",
+            extra={
+                "extra": {
+                    "error": str(e),
+                    "filename": getattr(file, "filename", "unknown"),
+                }
+            },
+        )
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+
 # --- File Operations Endpoints ---
 
 
@@ -720,9 +978,10 @@ async def get_memory_health():
     try:
         logger.info("Checking memory health")
 
-        health_status, alerts = (
-            await memory_analytics_service.health_monitor.check_health()
-        )
+        (
+            health_status,
+            alerts,
+        ) = await memory_analytics_service.health_monitor.check_health()
 
         health_report = {
             "status": health_status,
