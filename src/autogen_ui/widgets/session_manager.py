@@ -29,11 +29,13 @@ from PySide6.QtWidgets import (
     QTreeWidget,
     QTreeWidgetItem,
     QFileDialog,
+    QDialog,
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 
-from autogen_ui.services import SessionService
+from autogen_ui.services.session_service import SessionService
+from autogen_ui.dialogs.agent_selection_dialog import AgentSelectionDialog
 
 logger = logging.getLogger(__name__)
 
@@ -325,17 +327,64 @@ class SessionConfigWidget(QWidget):
         layout.addLayout(button_layout)
 
     def add_agent(self):
-        """Add agent to session"""
-        # Placeholder - would show agent selection dialog
-        agent_name = f"Agent-{self.agents_list.count() + 1}"
-        item = QListWidgetItem(agent_name)
-        self.agents_list.addItem(item)
+        """Add agent to session using agent selection dialog"""
+        # Get currently selected agent names
+        current_agents = []
+        for i in range(self.agents_list.count()):
+            item = self.agents_list.item(i)
+            has_data = (
+                item and hasattr(item, "data") and item.data(Qt.ItemDataRole.UserRole)
+            )
+            if has_data:
+                agent_data = item.data(Qt.ItemDataRole.UserRole)
+                current_agents.append(agent_data["name"])
+
+        # Show agent selection dialog
+        dialog = AgentSelectionDialog(self, current_agents)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_agents = dialog.get_selected_agents()
+            session_options = dialog.get_session_options()
+
+            # Store session options for later use
+            self._session_options = session_options
+
+            # Clear and repopulate agents list
+            self.agents_list.clear()
+            for agent in selected_agents:
+                item = QListWidgetItem()
+                display_text = f"{agent['name']} ({agent['role']})"
+                if agent["type"] == "preset":
+                    display_text += " [Preset]"
+                else:
+                    display_text += " [Custom]"
+
+                item.setText(display_text)
+                item.setData(Qt.ItemDataRole.UserRole, agent)
+                self.agents_list.addItem(item)
+
+            # Update remove button state
+            self.update_remove_button_state()
 
     def remove_agent(self):
         """Remove selected agent"""
         current_item = self.agents_list.currentItem()
         if current_item:
-            self.agents_list.takeItem(self.agents_list.row(current_item))
+            row = self.agents_list.row(current_item)
+            self.agents_list.takeItem(row)
+            self.update_remove_button_state()
+
+    def update_remove_button_state(self):
+        """Update the state of the remove agent button"""
+        has_agents = self.agents_list.count() > 0
+        has_selection = self.agents_list.currentItem() is not None
+        self.remove_agent_btn.setEnabled(has_agents and has_selection)
+
+        # Connect selection change to update button state
+        if not hasattr(self, "_selection_connected"):
+            self.agents_list.itemSelectionChanged.connect(
+                self.update_remove_button_state
+            )
+            self._selection_connected = True
 
     def browse_working_directory(self):
         """Browse for working directory"""
@@ -393,9 +442,20 @@ class SessionConfigWidget(QWidget):
         """Get current session configuration"""
         agents = []
         for i in range(self.agents_list.count()):
-            agents.append(self.agents_list.item(i).text())
+            item = self.agents_list.item(i)
+            if item:
+                # Try to get agent data first, fallback to text
+                agent_data = item.data(Qt.ItemDataRole.UserRole)
+                if agent_data and isinstance(agent_data, dict):
+                    agents.append(agent_data["name"])
+                else:
+                    # Fallback for old format or text-only items
+                    text = item.text()
+                    # Extract just the name (before first parenthesis)
+                    agent_name = text.split(" (")[0] if " (" in text else text
+                    agents.append(agent_name)
 
-        return {
+        config = {
             "name": self.session_name.text().strip(),
             "project": self.project_name.text().strip(),
             "objective": self.objective.toPlainText().strip(),
@@ -408,6 +468,12 @@ class SessionConfigWidget(QWidget):
             "timeout": self.timeout.value(),
             "created_at": datetime.now().isoformat(),
         }
+
+        # Add session options if available
+        if hasattr(self, "_session_options"):
+            config.update(self._session_options)
+
+        return config
 
 
 class SessionManagerWidget(QWidget):
@@ -683,7 +749,7 @@ class SessionManagerWidget(QWidget):
             objective = config.get(
                 "objective", f"{config.get('type', 'Chat')} session for {project_name}"
             )
-            agents = config.get("agents", ["assistant"])
+            selected_agents = config.get("agents", ["assistant"])
             working_directory = config.get("working_directory")
             session_type = config.get("type", "Chat")
 
