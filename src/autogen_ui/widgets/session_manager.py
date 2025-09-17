@@ -755,27 +755,9 @@ class SessionManagerWidget(QWidget):
     def _handle_session_start_request(self, config: dict):
         """Handle session start request from config widget"""
         try:
-            # Extract session parameters
-            project_name = config.get("project", "Unnamed Project")
-            objective = config.get(
-                "objective", f"{config.get('type', 'Chat')} session for {project_name}"
-            )
-            working_directory = config.get("working_directory")
-            session_type = config.get("type", "Chat")
-
-            # Start the session using the session service
-            self.session_service.start_session(
-                project_name=project_name,
-                objective=objective,
-                working_directory=working_directory,
-                session_type=session_type,
-            )
-
-            # Update UI to show session is starting
-            self.status_label.setText(f"Starting session: {project_name}")
-            self.status_label.setStyleSheet(
-                "QLabel { color: blue; font-weight: bold; padding: 4px; }"
-            )
+            # For now, just start the UI session directly
+            # TODO: Implement proper async session handling with MCP server
+            self.start_session(config)
 
         except Exception as e:
             QMessageBox.critical(
