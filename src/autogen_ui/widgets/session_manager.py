@@ -328,7 +328,7 @@ class SessionConfigWidget(QWidget):
 
     def add_agent(self):
         """Add agent to session using agent selection dialog"""
-        # Get currently selected agent names
+        # Get currently selected agent names to avoid duplicates
         current_agents = []
         for i in range(self.agents_list.count()):
             item = self.agents_list.item(i)
@@ -348,19 +348,30 @@ class SessionConfigWidget(QWidget):
             # Store session options for later use
             self._session_options = session_options
 
-            # Clear and repopulate agents list
-            self.agents_list.clear()
+            # Add only new agents to avoid duplicates
             for agent in selected_agents:
-                item = QListWidgetItem()
-                display_text = f"{agent['name']} ({agent['role']})"
-                if agent["type"] == "preset":
-                    display_text += " [Preset]"
-                else:
-                    display_text += " [Custom]"
+                # Check if this agent is already in the list
+                already_exists = False
+                for i in range(self.agents_list.count()):
+                    existing_item = self.agents_list.item(i)
+                    if existing_item and hasattr(existing_item, "data"):
+                        existing_data = existing_item.data(Qt.ItemDataRole.UserRole)
+                        if existing_data and existing_data.get("name") == agent["name"]:
+                            already_exists = True
+                            break
 
-                item.setText(display_text)
-                item.setData(Qt.ItemDataRole.UserRole, agent)
-                self.agents_list.addItem(item)
+                # Only add if not already in the list
+                if not already_exists:
+                    item = QListWidgetItem()
+                    display_text = f"{agent['name']} ({agent['role']})"
+                    if agent["type"] == "preset":
+                        display_text += " [Preset]"
+                    else:
+                        display_text += " [Custom]"
+
+                    item.setText(display_text)
+                    item.setData(Qt.ItemDataRole.UserRole, agent)
+                    self.agents_list.addItem(item)
 
             # Update remove button state
             self.update_remove_button_state()
@@ -749,7 +760,6 @@ class SessionManagerWidget(QWidget):
             objective = config.get(
                 "objective", f"{config.get('type', 'Chat')} session for {project_name}"
             )
-            selected_agents = config.get("agents", ["assistant"])
             working_directory = config.get("working_directory")
             session_type = config.get("type", "Chat")
 
