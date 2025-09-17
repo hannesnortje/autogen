@@ -168,3 +168,49 @@ poetry.toml
 ### VisualStudioCode Patch ###
 # Ignore all local history of files
 .ionide/
+
+# Qdrant data and storage directories
+qdrant_data/
+qdrant_storage/
+
+# Temporary files
+temp_*.json
+*.tmp
+
+# Server logs
+server.log
+*.log
+
+# VS Code Extension build artifacts and node modules
+vscode-extension/node_modules/
+vscode-extension/out/
+vscode-extension/*.vsix
+
+# Duplicate source files (keep only in vscode-extension/src/)
+/src/agentConfigPanel.ts
+/src/crossProjectPanel.ts
+/src/extension.ts
+/src/mcpClient.ts
+/src/memoryAnalyticsDashboard.ts
+/src/memoryExplorerPanel.ts
+/src/memoryProvider.ts
+/src/realtime.ts
+/src/realtimeDataService.ts
+/src/services/
+/src/sessionProvider.ts
+/src/sessionTreeProvider.ts
+/src/smartCommands.ts
+/src/statusBar.ts
+/src/test/
+
+# Root-level duplicates of extension files
+/package.json
+/package-lock.json
+/tsconfig.json
+/USER_GUIDE.md
+
+# Prevent temporary development files
+debug_*.py
+quick_*.py
+test_*_integration.py
+*CONTINUATION*.md

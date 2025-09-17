@@ -1,0 +1,12 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        "autogen.server.url": "http://localhost:9000",
+        "autogen.server.autoStart": true,
+        "autogen.server.debug": true
+    }
+}
