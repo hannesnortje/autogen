@@ -125,20 +125,23 @@ class AgentConfigWidget(QWidget):
         model_group = QGroupBox("Model Configuration")
         model_layout = QFormLayout(model_group)
 
-        # Model selection
+        # Model selection - Gemini as default and primary option
         self.model_combo = QComboBox()
         self.model_combo.addItems(
             [
-                "gpt-4o",
+                "gemini-2.0-flash",  # Primary Gemini model (default)
+                "gemini-pro",  # Alternative Gemini model
+                "gpt-4o",  # OpenAI models (requires API key)
                 "gpt-4o-mini",
                 "gpt-4-turbo",
-                "claude-3-opus",
+                "claude-3-opus",  # Anthropic models (requires API key)
                 "claude-3-sonnet",
                 "claude-3-haiku",
-                "gemini-pro",
-                "local-llama",
+                "local-llama",  # Local models
             ]
         )
+        # Set Gemini as default selection
+        self.model_combo.setCurrentText("gemini-2.0-flash")
         model_layout.addRow("Model:", self.model_combo)
 
         # Temperature
@@ -397,9 +400,12 @@ class AgentManagerWidget(QWidget):
                     "file_operations": True,
                 },
                 "model": {
-                    "name": "gpt-4o",
+                    "name": "gemini-2.0-flash",
                     "temperature": 0.3,
-                    "system_prompt": "You are an expert programmer. Write clean, efficient code and provide detailed explanations.",
+                    "system_prompt": (
+                        "You are an expert programmer. Write clean, "
+                        "efficient code and provide detailed explanations."
+                    ),
                 },
             },
             {
@@ -411,9 +417,12 @@ class AgentManagerWidget(QWidget):
                     "function_calling": True,
                 },
                 "model": {
-                    "name": "gpt-4o",
+                    "name": "gemini-2.0-flash",
                     "temperature": 0.5,
-                    "system_prompt": "You are a data analyst. Focus on insights, patterns, and clear visualizations.",
+                    "system_prompt": (
+                        "You are a data analyst. Focus on insights, "
+                        "patterns, and clear visualizations."
+                    ),
                 },
             },
             {
@@ -424,9 +433,12 @@ class AgentManagerWidget(QWidget):
                     "web_browsing": True,
                 },
                 "model": {
-                    "name": "claude-3-sonnet",
+                    "name": "gemini-2.0-flash",
                     "temperature": 0.8,
-                    "system_prompt": "You are a skilled writer. Create engaging, well-structured content.",
+                    "system_prompt": (
+                        "You are a skilled writer. Create engaging, "
+                        "well-structured content."
+                    ),
                 },
             },
             {
@@ -438,9 +450,12 @@ class AgentManagerWidget(QWidget):
                     "function_calling": True,
                 },
                 "model": {
-                    "name": "gpt-4o",
+                    "name": "gemini-2.0-flash",
                     "temperature": 0.4,
-                    "system_prompt": "You are a research assistant. Provide accurate, well-sourced information.",
+                    "system_prompt": (
+                        "You are a research assistant. Provide accurate, "
+                        "well-sourced information."
+                    ),
                 },
                 "memory": {"enabled": True, "scope": "project"},
             },
