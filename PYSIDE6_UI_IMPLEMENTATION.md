@@ -1673,6 +1673,183 @@ def chunk_markdown_content(content: str, filename: str) -> List[dict]:
 4. **Success**: View detailed completion report with chunk statistics
 5. **Search**: Immediately search and find uploaded content in memory
 
+### Step 6.5: Memory Deletion Management
+**Duration**: 3-4 hours
+**Testing**: Memory entries can be safely deleted with comprehensive controls
+**Git Workflow**:
+- Branch: `ui-step-6.5-memory-deletion`
+- Create branch from `main`
+- Push branch and create PR to `main`
+- Merge after testing, then create next branch from `main`
+
+**Tasks**:
+1. **Backend Deletion Endpoints**: Add comprehensive memory deletion APIs to MCP server
+2. **QdrantWrapper Extensions**: Implement delete operations in Qdrant client wrapper
+3. **Memory Deletion Dialog**: Create comprehensive deletion interface with safety features
+4. **UI Integration**: Add deletion controls to memory browser widget
+5. **Safety Mechanisms**: Implement confirmation dialogs and undo functionality
+6. **Batch Operations**: Support deletion of multiple memories with filtering
+
+**🗑️ Backend Implementation**:
+
+**MCP Server Deletion Endpoints**:
+```python
+# Add to src/autogen_mcp/mcp_server.py
+
+@app.delete("/memory/point/{collection_name}/{point_id}")
+async def delete_memory_point(collection_name: str, point_id: str):
+    """Delete a specific memory point by ID"""
+
+@app.delete("/memory/collection/{collection_name}")
+async def delete_memory_collection(collection_name: str):
+    """Delete entire memory collection"""
+
+@app.post("/memory/delete/batch")
+async def batch_delete_memory_points(delete_request: BatchDeleteRequest):
+    """Delete multiple memory points with filtering"""
+
+@app.post("/memory/delete/filtered")
+async def delete_filtered_memory(filter_request: FilterDeleteRequest):
+    """Delete memory entries matching specific criteria (date, scope, relevance)"""
+```
+
+**QdrantWrapper Deletion Methods**:
+```python
+# Add to src/autogen_mcp/qdrant_client.py
+
+def delete_point(self, collection: str, point_id: str) -> Dict[str, Any]:
+    """Delete a specific point by ID"""
+
+def delete_points(self, collection: str, point_ids: List[str]) -> Dict[str, Any]:
+    """Delete multiple points by IDs"""
+
+def delete_collection(self, collection_name: str) -> Dict[str, Any]:
+    """Delete entire collection"""
+
+def delete_points_by_filter(self, collection: str, filter_conditions: Dict) -> Dict[str, Any]:
+    """Delete points matching filter conditions"""
+```
+
+**🖥️ UI Implementation**:
+
+**Memory Deletion Dialog**:
+```python
+# New: src/autogen_ui_clean/dialogs/memory_deletion_dialog.py
+
+class MemoryDeletionDialog(QDialog):
+    """Comprehensive memory deletion dialog with tabbed interface"""
+
+    # Tabs:
+    # 1. Single Entry Deletion - Delete specific memory entries
+    # 2. Batch Deletion - Delete multiple selected entries
+    # 3. Filtered Deletion - Delete by date range, scope, relevance score
+    # 4. Collection Management - Delete/clear entire collections
+    # 5. Cleanup Wizard - Automated cleanup with recommendations
+```
+
+**Memory Browser Widget Enhancements**:
+```python
+# Enhance src/autogen_ui_clean/widgets/memory_browser.py
+
+class MemoryBrowserWidget(QWidget):
+    def setup_deletion_controls(self):
+        # Toolbar buttons
+        self.delete_button = QPushButton("Delete Selected")
+        self.cleanup_button = QPushButton("Memory Cleanup...")
+        self.collection_mgmt_button = QPushButton("Manage Collections")
+
+        # Context menu for right-click operations
+        self.memory_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.memory_tree.customContextMenuRequested.connect(self.show_context_menu)
+
+    def show_context_menu(self, position):
+        # Right-click context menu with deletion options
+        menu = QMenu()
+        menu.addAction("Delete Entry", self.delete_selected_entry)
+        menu.addAction("Delete Collection", self.delete_collection)
+        menu.addSeparator()
+        menu.addAction("Batch Delete...", self.show_batch_delete_dialog)
+```
+
+**Safety and Confirmation System**:
+```python
+# New: src/autogen_ui_clean/dialogs/deletion_confirmation_dialog.py
+
+class DeletionConfirmationDialog(QDialog):
+    """Multi-level safety confirmation for memory deletions"""
+
+    def __init__(self, deletion_type: str, items_count: int, parent=None):
+        # Show detailed impact analysis
+        # Require manual confirmation for large deletions
+        # Display what will be deleted with preview
+        # Offer backup creation before deletion
+```
+
+**🔧 Deletion Features**:
+
+**Deletion Types Supported**:
+- **Single Entry Deletion**: Individual memory entries with simple confirmation
+- **Multi-Select Deletion**: Selected entries from memory browser with batch confirmation
+- **Filtered Deletion**: Delete by criteria (date range, scope, relevance score, collection)
+- **Collection Deletion**: Remove entire memory collections with strict confirmation
+- **Smart Cleanup**: Automated deletion recommendations (old, duplicate, low-relevance)
+
+**Safety Mechanisms**:
+- **Confirmation Dialogs**: Progressive confirmation based on deletion scope
+- **Impact Analysis**: Show what will be deleted and potential consequences
+- **Backup Integration**: Automatic backup creation before major deletions
+- **Undo Capability**: Recent deletion recovery for 24-hour window
+- **Permission Levels**: Different confirmation requirements based on deletion scope
+
+**Advanced Deletion Filters**:
+- **Date-Based**: Remove memories older than specified timeframe
+- **Relevance-Based**: Delete entries below relevance threshold
+- **Scope-Based**: Remove from specific projects, agents, or collections
+- **Duplicate Detection**: Identify and remove similar/duplicate memories
+- **Size-Based**: Cleanup by memory entry size or total collection size
+
+**UI Integration Points**:
+
+**Memory Tree Widget**:
+- **Right-click Context Menu**: Delete entry, delete collection, batch operations
+- **Multi-select Support**: Ctrl+click for batch selection and deletion
+- **Visual Indicators**: Show deletion status and progress
+
+**Memory Management Toolbar**:
+- **Delete Button**: Delete selected memory entries with confirmation
+- **Cleanup Wizard**: Guided memory cleanup with recommendations
+- **Collection Manager**: Create, delete, and manage memory collections
+
+**Main Menu Integration**:
+- **Memory Menu**: "Delete Memory...", "Memory Cleanup", "Collection Management"
+- **Tools Menu**: "Memory Maintenance", "Cleanup Wizard"
+
+**Memory Analytics Integration**:
+- **Storage Usage Panel**: "Free Space" actions and cleanup recommendations
+- **Health Monitoring**: Automatic cleanup suggestions based on usage patterns
+
+**Acceptance Criteria**:
+- [ ] **Individual memory entries can be deleted** with appropriate confirmation
+- [ ] **Multiple entries can be selected and deleted** in batch operations
+- [ ] **Collections can be deleted or cleared** with strict safety confirmations
+- [ ] **Filtered deletion works by date, scope, relevance** with preview capabilities
+- [ ] **Deletion safety mechanisms prevent accidental loss** with multi-level confirmations
+- [ ] **Backup functionality protects data** before major deletion operations
+- [ ] **Undo capability allows recovery** of recently deleted memories
+- [ ] **Context menu provides intuitive access** to deletion functions
+- [ ] **Progress feedback shows deletion status** for long-running operations
+- [ ] **Memory analytics integration** provides cleanup recommendations
+- [ ] **Collection management interface** allows comprehensive collection operations
+- [ ] **Error handling provides clear feedback** when deletions fail
+- [ ] **Performance remains responsive** during large deletion operations
+
+**📋 Usage Scenarios**:
+1. **Quick Delete**: Right-click memory entry → "Delete Entry" → Confirm
+2. **Batch Cleanup**: Select multiple entries → Delete button → Confirm batch
+3. **Old Memory Cleanup**: Memory Cleanup → Filter by date → Preview → Delete
+4. **Collection Management**: Collections tab → Select collection → Delete/Clear
+5. **Smart Recommendations**: Analytics panel → "Cleanup Suggestions" → Review → Apply
+
 ## Phase 7: Testing and Quality Assurance
 
 ### Step 7.1: Automated Testing
