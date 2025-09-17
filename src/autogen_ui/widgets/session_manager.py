@@ -118,7 +118,7 @@ class ConversationViewer(QWidget):
 
         # Scroll to bottom
         cursor = self.conversation_text.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(cursor.MoveOperation.End)
         self.conversation_text.setTextCursor(cursor)
 
     def export_conversation(self):
