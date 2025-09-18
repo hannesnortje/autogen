@@ -274,6 +274,89 @@ Every agent inherits native memory capabilities through `act_with_memory()`:
 - **Step 27**: Monitoring, logging, and alerting infrastructure
 - **Step 28**: Auto-scaling and load balancing implementation
 
+### 🐳 **Docker Deployment Strategy (Future Implementation)**
+
+#### **Option 1: Multi-Stage Docker Build (Recommended)**
+**Benefits**: Smallest production image, Poetry for development, pip for runtime
+```dockerfile
+# Build stage: Poetry dependency resolution
+FROM python:3.11-slim as dependencies
+WORKDIR /app
+COPY pyproject.toml poetry.lock ./
+RUN pip install poetry && \
+    poetry export -f requirements.txt --output requirements.txt --without-hashes
+
+# Production stage: Clean pip-based runtime
+FROM python:3.11-slim as production
+WORKDIR /app
+COPY --from=dependencies /app/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+ENV CONTAINER_MODE=1
+CMD ["python", "launch.py"]
+```
+
+#### **Option 2: All-in-One Container**
+**Benefits**: Simpler build, embedded Qdrant, single image deployment
+```dockerfile
+FROM python:3.11-slim
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN curl -L https://github.com/qdrant/qdrant/releases/download/v1.7.0/qdrant-x86_64-unknown-linux-gnu.tar.gz \
+    | tar xz -C /usr/local/bin
+WORKDIR /app
+COPY . .
+RUN pip install poetry && poetry install --no-dev
+EXPOSE 9000 6333
+CMD ["poetry", "run", "python", "launch.py"]
+```
+
+#### **Option 3: Docker Compose Multi-Service**
+**Benefits**: Separation of concerns, easier scaling, development/production parity
+```yaml
+version: "3.8"
+services:
+  autogen:
+    build: .
+    ports: ["9000:9000"]
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - CONTAINER_MODE=1
+    depends_on: [qdrant]
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports: ["6333:6333"]
+    volumes: [qdrant_data:/qdrant/storage]
+volumes:
+  qdrant_data:
+```
+
+#### **Required Code Modifications for Docker**
+1. **Container-aware launch.py**:
+   ```python
+   def get_python_cmd():
+       if shutil.which("poetry") and not os.getenv("CONTAINER_MODE"):
+           return ["poetry", "run", "python"]
+       else:
+           return ["python"]
+   ```
+
+2. **Docker-compatible configuration**:
+   - Environment variable configuration override
+   - Container health checks and readiness probes
+   - Volume mounting for persistent Qdrant data
+   - Multi-architecture builds (x86_64, ARM64)
+
+#### **Deployment Benefits**
+- **Eliminates all dependency risks**: No Poetry, Python, or Qt system dependencies
+- **Cross-platform portability**: Runs identically on any Docker-capable system
+- **One-command deployment**: `docker run -p 9000:9000 hannesnortje/autogen`
+- **Production ready**: Container orchestration, scaling, monitoring support
+- **Data persistence**: Qdrant data preserved in Docker volumes
+
+**Implementation Priority**: High for production deployment
+**Estimated Effort**: 8-12 hours (Dockerfile + CI/CD + testing)
+**User Experience**: From complex dev setup → single `docker run` command
+
 ### 📊 **Advanced Analytics Implementation Details**
 
 ```python
