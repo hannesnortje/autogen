@@ -33,6 +33,12 @@ from PySide6.QtGui import QFont
 
 logger = logging.getLogger(__name__)
 
+try:
+    # Optional import: local mode support
+    from autogen_ui.local_memory_client import LocalMemoryClient
+except Exception:
+    LocalMemoryClient = None  # type: ignore[assignment]
+
 
 class MemoryWorker(QThread):
     """Worker thread for memory operations"""
@@ -48,11 +54,16 @@ class MemoryWorker(QThread):
         self.server_url = server_url
         self.operation = None
         self.params = {}
+        self.local_mode = False
 
     def search_memory(self, query: str, collection: str, limit: int = 10):
         """Search memory entries"""
         self.operation = "search"
-        self.params = {"query": query, "collection": collection, "limit": limit}
+        self.params = {
+            "query": query,
+            "collection": collection,
+            "limit": limit,
+        }
         self.start()
 
     def get_stats(self):
@@ -70,7 +81,11 @@ class MemoryWorker(QThread):
     def upload_file(self, file_path: str, project: str, scope: str):
         """Upload file to memory"""
         self.operation = "upload"
-        self.params = {"file_path": file_path, "project": project, "scope": scope}
+        self.params = {
+            "file_path": file_path,
+            "project": project,
+            "scope": scope,
+        }
         self.start()
 
     def run(self):
@@ -90,6 +105,28 @@ class MemoryWorker(QThread):
     def _search(self):
         """Perform memory search"""
         try:
+            if self.local_mode and LocalMemoryClient is not None:
+                client = LocalMemoryClient.instance()
+                results = client.search(
+                    query=self.params["query"],
+                    scope=self.params.get("collection", "project"),
+                    limit=self.params.get("limit", 10),
+                )
+                # Transform to API-compatible shape if needed
+                as_api = [
+                    {
+                        "score": r.get("score", 0.0),
+                        "payload": {
+                            "content": r.get("content", ""),
+                            **r.get("metadata", {}),
+                        },
+                        "id": r.get("id"),
+                    }
+                    for r in results
+                ]
+                self.search_completed.emit(as_api)
+                return
+
             response = requests.post(
                 f"{self.server_url}/memory/search",
                 json={
@@ -103,31 +140,52 @@ class MemoryWorker(QThread):
                 results = response.json()
                 self.search_completed.emit(results.get("results", []))
             else:
-                self.error_occurred.emit(f"Search failed: {response.status_code}")
+                code = response.status_code
+                self.error_occurred.emit(f"Search failed: {code}")
         except requests.RequestException as e:
             self.error_occurred.emit(f"Search request failed: {e}")
 
     def _get_stats(self):
         """Get memory statistics"""
         try:
-            response = requests.get(f"{self.server_url}/memory/stats", timeout=10)
+            if self.local_mode and LocalMemoryClient is not None:
+                client = LocalMemoryClient.instance()
+                stats = client.get_stats()
+                self.stats_completed.emit(stats)
+                return
+
+            response = requests.get(
+                f"{self.server_url}/memory/stats",
+                timeout=10,
+            )
             if response.status_code == 200:
                 self.stats_completed.emit(response.json())
             else:
-                self.error_occurred.emit(f"Stats failed: {response.status_code}")
+                code = response.status_code
+                self.error_occurred.emit(f"Stats failed: {code}")
         except requests.RequestException as e:
             self.error_occurred.emit(f"Stats request failed: {e}")
 
     def _get_collections(self):
         """Get available collections"""
         try:
-            response = requests.get(f"{self.server_url}/collections", timeout=10)
+            if self.local_mode and LocalMemoryClient is not None:
+                client = LocalMemoryClient.instance()
+                collections = client.list_collections()
+                self.collections_completed.emit(collections)
+                return
+
+            response = requests.get(
+                f"{self.server_url}/collections",
+                timeout=10,
+            )
             if response.status_code == 200:
                 data = response.json()
                 collections = data.get("collections", [])
                 self.collections_completed.emit(collections)
             else:
-                self.error_occurred.emit(f"Collections failed: {response.status_code}")
+                code = response.status_code
+                self.error_occurred.emit(f"Collections failed: {code}")
         except requests.RequestException as e:
             self.error_occurred.emit(f"Collections request failed: {e}")
 
@@ -138,16 +196,29 @@ class MemoryWorker(QThread):
             project = self.params["project"]
             scope = self.params["scope"]
 
-            # Read file content
+            if self.local_mode and LocalMemoryClient is not None:
+                # Use in-process client
+                client = LocalMemoryClient.instance()
+                result = client.upload_markdown(file_path, project, scope)
+                self.upload_completed.emit(result)
+                return
+
+            # Fallback to HTTP API
             with open(file_path, "rb") as f:
-                files = {"file": (file_path.split("/")[-1], f, "text/markdown")}
+                files = {
+                    "file": (
+                        file_path.split("/")[-1],
+                        f,
+                        "text/markdown",
+                    )
+                }
                 data = {"project": project, "scope": scope}
 
                 response = requests.post(
                     f"{self.server_url}/memory/upload",
                     files=files,
                     data=data,
-                    timeout=60,  # Longer timeout for file upload
+                    timeout=60,
                 )
 
             if response.status_code == 200:
@@ -186,7 +257,8 @@ class MemoryBrowserWidget(QWidget):
         self._startup_delay_timer = QTimer()
         self._startup_delay_timer.setSingleShot(True)
         self._startup_delay_timer.timeout.connect(self.refresh_data)
-        self._startup_delay_timer.start(3000)  # Wait 3 seconds before first load
+        # Wait 3 seconds before first load
+        self._startup_delay_timer.start(3000)
 
     def setup_ui(self):
         """Set up the memory browser UI"""
@@ -384,6 +456,14 @@ class MemoryBrowserWidget(QWidget):
         self.scope_combo.addItems(["project", "global", "artifacts"])
         settings_layout.addWidget(self.scope_combo)
 
+        # Local mode toggle
+        self.local_mode_cb = QCheckBox("Local mode (no HTTP)")
+        self.local_mode_cb.setToolTip(
+            "Write directly to memory service when running locally."
+        )
+        self.local_mode_cb.stateChanged.connect(self.on_local_mode_toggled)
+        settings_layout.addWidget(self.local_mode_cb)
+
         upload_layout.addWidget(settings_group)
 
         # Upload controls
@@ -475,6 +555,10 @@ class MemoryBrowserWidget(QWidget):
 
         # Auto-search
         self.search_input.textChanged.connect(self.on_search_text_changed)
+
+        # Initialize worker local mode per checkbox (default off)
+        if hasattr(self, "local_mode_cb"):
+            self.worker.local_mode = self.local_mode_cb.isChecked()
 
     def setup_timer(self):
         """Set up periodic refresh timer"""
@@ -757,9 +841,17 @@ class MemoryBrowserWidget(QWidget):
         # Add status message
         self.upload_status.append(f"Uploading {self.selected_file_path}...")
         self.upload_status.append(f"Project: {project}, Scope: {scope}")
+        if self.local_mode_cb.isChecked():
+            self.upload_status.append("Mode: Local (in-process)")
+        else:
+            self.upload_status.append("Mode: HTTP API")
 
         # Start upload
         self.worker.upload_file(self.selected_file_path, project, scope)
+
+    def on_local_mode_toggled(self):
+        """Handle local mode checkbox state change."""
+        self.worker.local_mode = self.local_mode_cb.isChecked()
 
     def on_upload_completed(self, result: dict):
         """Handle upload completion"""
