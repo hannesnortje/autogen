@@ -38,6 +38,56 @@ The AutoGen MCP VS Code extension provides a rich, integrated development experi
 
 For detailed extension documentation, see [`vscode-extension/README.md`](vscode-extension/README.md).
 
+## PySide6 Desktop UI
+
+The AutoGen Desktop UI provides a comprehensive desktop application for managing AutoGen sessions, agents, and memory directly from your desktop.
+
+### Key Features
+- **Server Management**: Real-time MCP server status monitoring and connection management
+- **Session Management**: Complete session lifecycle with conversation history and working directory support
+- **Memory Browser**: Advanced memory exploration with search, analytics, and file upload capabilities
+- **Agent Manager**: Agent configuration with built-in presets (Code Assistant, Data Analyst, Content Writer, Research Assistant)
+- **Real-time Updates**: WebSocket integration with desktop notifications
+- **Professional Interface**: Modern Qt6-based interface with tabbed layout and clean design
+
+### Auto-Launch Configuration
+The UI can be configured to automatically start with the MCP server or run independently:
+
+**Enable auto-launch (UI starts with server):**
+```bash
+poetry run python ui_control.py set auto
+poetry run python launch.py  # Starts both server and UI
+```
+
+**Manual launch modes:**
+```bash
+poetry run python ui_control.py set never      # Disable auto-launch (default)
+poetry run python ui_control.py set on_demand  # Manual launch only
+poetry run python ui_control.py set vscode_only # VSCode extension only
+```
+
+**Launch options:**
+```bash
+poetry run python launch.py                    # Use configuration setting
+poetry run python launch.py --server-only      # MCP server only
+poetry run python launch.py --ui-only          # UI only (connect to existing server)
+poetry run python launch.py --with-ui          # Force both server and UI
+```
+
+**Manual UI control:**
+```bash
+poetry run python ui_control.py status         # Show current configuration
+poetry run python ui_control.py launch         # Launch UI manually (if server running)
+```
+
+### Architecture Benefits
+- **Independent Processes**: UI and server run separately - UI can close without affecting server
+- **Direct Integration**: UI uses Python imports for optimal performance (not HTTP endpoints)
+- **Port 9000**: Server runs on port 9000 for both API and UI access
+- **Flexible Deployment**: Server can run headless for production, with UI for development
+
+For detailed UI documentation, see [`PYSIDE6_UI_IMPLEMENTATION.md`](PYSIDE6_UI_IMPLEMENTATION.md).
+
 ## Onboarding & Quick Start
 1. **Install Poetry:** https://python-poetry.org/docs/
 2. **Clone the repo:**
@@ -62,8 +112,15 @@ For detailed extension documentation, see [`vscode-extension/README.md`](vscode-
    ```bash
    poetry run pytest -q
    ```
-7. **Run the CLI dashboard (after Step 13):**
+7. **Start the application:**
    ```bash
+   # Option 1: MCP server + Desktop UI (auto-launch enabled)
+   poetry run python launch.py
+
+   # Option 2: MCP server only
+   poetry run python launch.py --server-only
+
+   # Option 3: CLI dashboard (legacy)
    poetry run python -m autogen_mcp.cli_dashboard
    ```
 
@@ -80,8 +137,10 @@ For detailed extension documentation, see [`vscode-extension/README.md`](vscode-
 
 ## Configuration
 - `.env` for secrets and API keys (never commit real secrets)
+- `autogen.config.json` for UI launch behavior and server settings
 - Qdrant config: `QDRANT_URL`, `QDRANT_API_KEY`
 - LLM config: `GEMINI_API_KEY` (only needed for agent LLM calls)
+- Server runs on port 9000 by default (configurable in `autogen.config.json`)
 
 ## Development Workflow
 - One step per feature branch, conventional commits, PR checks required.
