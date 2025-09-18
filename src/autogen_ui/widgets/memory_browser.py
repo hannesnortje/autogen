@@ -182,8 +182,11 @@ class MemoryBrowserWidget(QWidget):
         self.setup_connections()
         self.setup_timer()
 
-        # Initial load
-        self.refresh_data()
+        # Add startup delay to prevent connection errors
+        self._startup_delay_timer = QTimer()
+        self._startup_delay_timer.setSingleShot(True)
+        self._startup_delay_timer.timeout.connect(self.refresh_data)
+        self._startup_delay_timer.start(3000)  # Wait 3 seconds before first load
 
     def setup_ui(self):
         """Set up the memory browser UI"""
@@ -490,6 +493,13 @@ class MemoryBrowserWidget(QWidget):
 
     def refresh_stats(self):
         """Refresh memory statistics"""
+        # Add a small delay to prevent connection errors during startup
+        if (
+            hasattr(self, "_startup_delay_timer")
+            and self._startup_delay_timer.isActive()
+        ):
+            return  # Still in startup delay, skip this request
+
         self.worker.get_stats()
 
     def perform_search(self):

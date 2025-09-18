@@ -1226,8 +1226,31 @@ async def get_memory_stats():
     try:
         logger.info("Getting memory stats for UI")
 
+        # Check if memory service is initialized
+        if (
+            not hasattr(memory_service, "collection_manager")
+            or not memory_service.collection_manager
+        ):
+            logger.warning("Memory service not fully initialized")
+            return {
+                "status": "initializing",
+                "message": "Memory service is starting up...",
+            }
+
+        # Check if Qdrant client is available
+        if (
+            not hasattr(memory_service.collection_manager, "client")
+            or not memory_service.collection_manager.client
+        ):
+            logger.warning("Qdrant client not available")
+            return {
+                "status": "connecting",
+                "message": "Connecting to memory database...",
+            }
+
         # Get basic collection stats
         stats = {}
+        total_documents = 0
 
         # Get stats from Qdrant directly
         for scope in [
@@ -1243,18 +1266,30 @@ async def get_memory_stats():
                     getattr(MemoryScope, scope.upper()), None
                 )
 
-                # Get collection info from Qdrant client
-                info = memory_service.collection_manager.client.get_collection(
-                    collection_name
-                )
-
-                stats[collection_name] = {
-                    "documents_count": info.points_count,
-                    "vectors_count": info.points_count,
-                    "points_count": info.points_count,
-                    "indexed_vectors_count": info.points_count,
-                    "status": "green" if info.status == "green" else "yellow",
-                }
+                # Check if collection exists before getting info
+                try:
+                    info = memory_service.collection_manager.client.get_collection(
+                        collection_name
+                    )
+                    stats[collection_name] = {
+                        "documents_count": info.points_count,
+                        "vectors_count": info.points_count,
+                        "points_count": info.points_count,
+                        "indexed_vectors_count": info.points_count,
+                        "status": "green" if info.status == "green" else "yellow",
+                    }
+                    total_documents += info.points_count
+                except Exception as collection_error:
+                    logger.debug(
+                        f"Collection {collection_name} not ready or doesn't exist: {collection_error}"
+                    )
+                    stats[collection_name] = {
+                        "documents_count": 0,
+                        "vectors_count": 0,
+                        "points_count": 0,
+                        "indexed_vectors_count": 0,
+                        "status": "not_ready",
+                    }
             except Exception as e:
                 logger.warning(f"Failed to get stats for {scope}: {e}")
                 stats[f"autogen_{scope}"] = {
@@ -1262,15 +1297,35 @@ async def get_memory_stats():
                     "vectors_count": 0,
                     "points_count": 0,
                     "indexed_vectors_count": 0,
-                    "status": "red",
+                    "status": "error",
                 }
+
+        # Add summary stats
+        stats["summary"] = {
+            "total_documents": total_documents,
+            "collections_ready": len(
+                [
+                    s
+                    for s in stats.values()
+                    if isinstance(s, dict) and s.get("status") == "green"
+                ]
+            ),
+            "total_collections": len(stats) - 1,  # Exclude the summary itself
+            "overall_status": "ready" if total_documents > 0 else "empty",
+        }
 
         logger.info("Memory stats retrieved successfully")
         return stats
 
     except Exception as e:
         logger.error("Failed to get memory stats", extra={"extra": {"error": str(e)}})
-        raise HTTPException(status_code=500, detail=f"Memory stats failed: {str(e)}")
+        # Return a safe fallback instead of raising an exception
+        return {
+            "status": "error",
+            "message": f"Failed to get memory statistics: {str(e)}",
+            "collections": 0,
+            "total_documents": 0,
+        }
 
 
 @app.get("/memory/analytics/report")

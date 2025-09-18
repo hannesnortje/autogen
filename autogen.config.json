@@ -17,35 +17,7 @@
     "auto_open_browser": false
   },
   "agents": {
-    "custom_agents": [
-      {
-        "name": "Tester",
-        "description": "Test final code before commit to origin",
-        "role": "Tester",
-        "capabilities": {
-          "code_execution": false,
-          "human_input": false,
-          "function_calling": false,
-          "web_browsing": false,
-          "file_operations": false
-        },
-        "model": {
-          "name": "gemini-2.0-flash",
-          "temperature": 0.7,
-          "max_tokens": 2048,
-          "system_prompt": "Do end-to-end test before commit"
-        },
-        "memory": {
-          "enabled": true,
-          "scopes": [
-            "global",
-            "project",
-            "thread"
-          ],
-          "retrieval_limit": 10
-        }
-      }
-    ]
+    "custom_agents": []
   },
   "integration_mode": "hybrid",
   "project_root": "/media/hannesn/storage/Code"
