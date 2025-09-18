@@ -27,15 +27,16 @@ from pathlib import Path
 from typing import Optional
 import logging
 
-# Add project root to path
+# Add project root to path first, then import
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root / "src"))
 
-from autogen_mcp.config import (
+# Now import after path is set
+from autogen_mcp.config import (  # noqa: E402
     get_config,
     update_ui_launch_mode,
     UILaunchMode,
-)  # noqa: E402
+)
 
 
 class AutoGenLauncher:
@@ -45,6 +46,7 @@ class AutoGenLauncher:
         self.config = get_config()
         self.server_process: Optional[subprocess.Popen] = None
         self.ui_process: Optional[subprocess.Popen] = None
+        self.qdrant_started_by_launcher = False  # Track if we started Qdrant
         self.logger = self._setup_logging()
 
     def _setup_logging(self) -> logging.Logger:
@@ -78,8 +80,79 @@ class AutoGenLauncher:
 
         return False
 
+    def start_qdrant(self) -> bool:
+        """Start Qdrant server via docker-compose if not already running."""
+
+        self.logger.info("Checking Qdrant server...")
+
+        try:
+            # Check if Qdrant is already running
+            import requests
+
+            response = requests.get("http://localhost:6333/", timeout=2)
+            if response.status_code == 200:
+                self.logger.info("✅ Qdrant server already running")
+                return True
+        except (requests.ConnectionError, requests.Timeout):
+            pass  # Qdrant not running, we'll start it
+        except Exception as e:
+            self.logger.warning(f"Could not check Qdrant status: {e}")
+
+        # Start Qdrant via docker-compose
+        self.logger.info("Starting Qdrant server...")
+
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "up", "-d", "qdrant"],
+                cwd=project_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode == 0:
+                # Wait for Qdrant to be ready
+                self.logger.info("Waiting for Qdrant to be ready...")
+
+                import requests
+
+                for i in range(10):  # Try for 10 seconds
+                    try:
+                        response = requests.get("http://localhost:6333/", timeout=1)
+                        if response.status_code == 200:
+                            self.logger.info("✅ Qdrant server started successfully")
+                            self.qdrant_started_by_launcher = True
+                            return True
+                    except (requests.ConnectionError, requests.Timeout):
+                        pass
+
+                    time.sleep(1)
+
+                self.logger.error("❌ Qdrant started but not responding")
+                return False
+            else:
+                self.logger.error(f"❌ Failed to start Qdrant: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            self.logger.error("❌ Qdrant startup timed out")
+            return False
+        except FileNotFoundError:
+            self.logger.error(
+                "❌ Docker not found. Please install Docker to use Qdrant."
+            )
+            return False
+        except Exception as e:
+            self.logger.error(f"❌ Failed to start Qdrant: {e}")
+            return False
+
     def start_server(self) -> bool:
         """Start the MCP server."""
+
+        # Start Qdrant first
+        if not self.start_qdrant():
+            self.logger.error("❌ Cannot start MCP server without Qdrant")
+            return False
 
         self.logger.info("Starting AutoGen MCP server...")
 
@@ -186,6 +259,24 @@ class AutoGenLauncher:
             except subprocess.TimeoutExpired:
                 self.logger.warning("Force killing MCP server...")
                 self.server_process.kill()
+
+        # Stop Qdrant if we started it
+        if self.qdrant_started_by_launcher:
+            self.logger.info("Stopping Qdrant server...")
+            try:
+                result = subprocess.run(
+                    ["docker", "compose", "stop", "qdrant"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                if result.returncode == 0:
+                    self.logger.info("✅ Qdrant server stopped")
+                else:
+                    self.logger.warning("⚠️ Failed to stop Qdrant gracefully")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not stop Qdrant: {e}")
 
     def launch(
         self, server_only: bool = False, ui_only: bool = False, force_ui: bool = False
