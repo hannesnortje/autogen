@@ -237,7 +237,14 @@ class LocalMemoryClient:
         project: str | None = None,
     ) -> list[dict]:
         """Search locally using MultiScopeMemoryService."""
-        if project:
+        # Ensure project context for project-scope searches
+        if scope and scope.lower() == "project":
+            if not project:
+                # Derive default project from workspace path, like server
+                workspace_path = os.getenv("MCP_WORKSPACE", os.getcwd())
+                project = os.path.basename(workspace_path)
+            self._memory_service.set_project(project)
+        elif project:
             self._memory_service.set_project(project)
         return self._memory_service.search(
             query=query,
