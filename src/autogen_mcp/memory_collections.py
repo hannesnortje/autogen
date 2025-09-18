@@ -145,10 +145,18 @@ class CollectionManager:
         """Provide access to the Qdrant client for compatibility."""
         return self.qdrant
 
+    # Backward-compat alias: some code references collection_manager.q
+    @property
+    def q(self) -> QdrantWrapper:
+        return self.qdrant
+
     def get_collection_name(
         self, scope: MemoryScope, project_id: Optional[str] = None
     ) -> str:
-        """Get the actual collection name for a scope, handling project-specific naming."""
+        """Get actual collection name for a scope.
+
+        Handles project-specific naming.
+        """
         schema = COLLECTION_SCHEMAS[scope]
 
         if scope == MemoryScope.PROJECT and project_id:
@@ -246,7 +254,10 @@ class CollectionManager:
                     initialized[f"project_{project_id}"] = collection_name
                 except Exception as e:
                     self.logger.error(
-                        f"Failed to initialize project collection for {project_id}: {e}"
+                        (
+                            "Failed to initialize project collection for "
+                            f"{project_id}: {e}"
+                        )
                     )
 
         self.logger.info(
@@ -316,6 +327,8 @@ class CollectionManager:
             return collection_name in existing
         except Exception as e:
             self.logger.warning(
-                (f"Failed to check existence for collection {collection_name}: {e}")
+                "Failed to check existence for collection %s: %s",
+                collection_name,
+                e,
             )
             return False
