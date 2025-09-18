@@ -4,6 +4,7 @@ Browse and search Qdrant memory collections
 """
 
 import logging
+import os
 import requests
 from typing import Any, Dict, List, Optional, cast
 from PySide6.QtWidgets import (
@@ -211,7 +212,18 @@ class MemoryWorker(QThread):
             )
             if response.status_code == 200:
                 data = response.json()
-                collections = data.get("collections", [])
+                # Support both: list response or wrapped dict
+                if isinstance(data, list):
+                    collections = data
+                elif isinstance(data, dict):
+                    collections = (
+                        data.get("collections")
+                        or data.get("result")
+                        or data.get("data")
+                        or []
+                    )
+                else:
+                    collections = []
                 self.collections_completed.emit(collections)
             else:
                 code = response.status_code
@@ -296,6 +308,21 @@ class MemoryBrowserWidget(QWidget):
         # Wait 3 seconds before first load
         self._startup_delay_timer.start(3000)
 
+        # Initialize Local mode default from env and sync toggles
+        try:
+            default_local = os.getenv("AUTOGEN_UI_LOCAL_MODE", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+        except Exception:
+            default_local = False
+        if hasattr(self, "local_mode_status_cb"):
+            self.local_mode_status_cb.setChecked(default_local)
+        if hasattr(self, "local_mode_cb"):
+            self.local_mode_cb.setChecked(default_local)
+        self.worker.local_mode = default_local
+
     def setup_ui(self):
         """Set up the memory browser UI"""
         layout = QVBoxLayout(self)
@@ -321,12 +348,22 @@ class MemoryBrowserWidget(QWidget):
             "QLabel { color: orange; font-weight: bold; padding: 4px; }"
         )
 
+        # Global Local mode toggle (applies to all operations)
+        self.local_mode_status_cb = QCheckBox("Local mode (no HTTP)")
+        self.local_mode_status_cb.setToolTip(
+            "Use in-process client for search/stats/collections/upload."
+        )
+        self.local_mode_status_cb.stateChanged.connect(
+            self.on_local_mode_status_toggled
+        )
+
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.setMaximumWidth(80)
         self.refresh_btn.clicked.connect(self.refresh_data)
 
         status_layout.addWidget(self.status_label)
         status_layout.addStretch()
+        status_layout.addWidget(self.local_mode_status_cb)
         status_layout.addWidget(self.refresh_btn)
 
         layout.addWidget(status_frame)
@@ -905,7 +942,21 @@ class MemoryBrowserWidget(QWidget):
 
     def on_local_mode_toggled(self):
         """Handle local mode checkbox state change."""
-        self.worker.local_mode = self.local_mode_cb.isChecked()
+        checked = self.local_mode_cb.isChecked()
+        if hasattr(self, "local_mode_status_cb"):
+            self.local_mode_status_cb.blockSignals(True)
+            self.local_mode_status_cb.setChecked(checked)
+            self.local_mode_status_cb.blockSignals(False)
+        self.worker.local_mode = checked
+
+    def on_local_mode_status_toggled(self):
+        """Handle local mode toggle from status bar and sync upload tab."""
+        checked = self.local_mode_status_cb.isChecked()
+        if hasattr(self, "local_mode_cb"):
+            self.local_mode_cb.blockSignals(True)
+            self.local_mode_cb.setChecked(checked)
+            self.local_mode_cb.blockSignals(False)
+        self.worker.local_mode = checked
 
     def on_upload_completed(self, result: dict):
         """Handle upload completion"""
