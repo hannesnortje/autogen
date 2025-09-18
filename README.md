@@ -1,13 +1,23 @@
-# AutoGen + Qdrant + VS Code MCP (Poetry)
+# AutoGen Multi-Agent System
 
-This repository implements an AutoGen multi-agent workflow with Qdrant-backed memory and a VS Code MCP server. It uses Poetry for the Python environment.
+**🎯 Production-Ready Multi-Agent Development Platform**
 
-## Goals
-- Multi-scope memory (global/project/agent/thread/objectives/artifacts) in Qdrant
-- Hybrid retrieval (dense embeddings + sparse) with tiered search
-- AutoGen agents (Agile, Planner, Architect, Coder, Reviewer, Tester, DevOps, Doc)
-- VS Code-native control via MCP
-- Git-based workflow with per-agent branches and CI gates
+AutoGen is a sophisticated multi-agent system that combines memory-augmented AI agents, collaborative scrum workflows, and comprehensive development tooling into a unified platform. The system provides intelligent memory management across multiple scopes, agent orchestration capabilities, and both desktop and VS Code integration.
+
+## 📖 Complete Documentation
+
+**🔗 See [`AUTOGEN_PROJECT_MASTER.md`](AUTOGEN_PROJECT_MASTER.md)** for comprehensive project documentation including:
+- Complete system architecture and current capabilities
+- Implementation journey and development phases
+- Future roadmap with advanced analytics enhancements
+- Technical reference, API documentation, and development guide
+
+## 🚀 Quick Start Overview
+- **Multi-scope memory**: 6-scope architecture with 603+ indexed entries (global/project/agent/thread/objectives/artifacts)
+- **Agent collaboration**: Memory-augmented agents with scrum methodology integration
+- **Desktop UI**: Complete PySide6 application with real-time memory browser and session management
+- **VS Code integration**: Extension with session tree view, memory explorer, and dashboard
+- **Production ready**: Sub-200ms response times, comprehensive testing, connection resilience
 
 ## Project Structure
 - `src/autogen_mcp/`: Main source code (agents, memory, Qdrant, CLI, server, dashboard)
@@ -95,7 +105,7 @@ The launcher automatically manages Qdrant dependencies:
 - **Clean Shutdown**: Stops Qdrant when launcher exits (if it started it)
 - **No Manual Setup**: No need to run `docker compose up -d` manually
 
-For detailed UI documentation, see [`PYSIDE6_UI_IMPLEMENTATION.md`](PYSIDE6_UI_IMPLEMENTATION.md).
+For detailed UI documentation, see [`docs/archive/PYSIDE6_UI_IMPLEMENTATION.md`](docs/archive/PYSIDE6_UI_IMPLEMENTATION.md).
 
 ## Onboarding & Quick Start
 1. **Install Poetry:** https://python-poetry.org/docs/
@@ -153,7 +163,8 @@ For detailed UI documentation, see [`PYSIDE6_UI_IMPLEMENTATION.md`](PYSIDE6_UI_I
 
 ## Development Workflow
 - One step per feature branch, conventional commits, PR checks required.
-- See `IMPLEMENTATION_PLAN.md` for the detailed step plan and checkboxes.
+- See [`docs/archive/IMPLEMENTATION_PLAN.md`](docs/archive/IMPLEMENTATION_PLAN.md) for historical step plan and checkboxes.
+- See [`AUTOGEN_PROJECT_MASTER.md`](AUTOGEN_PROJECT_MASTER.md) for current status and future roadmap.
 - Contributions: see `CONTRIBUTING.md`.
 
 ## Documentation & ADRs
