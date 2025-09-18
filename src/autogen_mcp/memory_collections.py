@@ -308,3 +308,14 @@ class CollectionManager:
             health["errors"].append(str(e))
 
         return health
+
+    def collection_exists(self, collection_name: str) -> bool:
+        """Return True if the given collection exists in Qdrant."""
+        try:
+            existing = self.qdrant.list_collections() or []
+            return collection_name in existing
+        except Exception as e:
+            self.logger.warning(
+                (f"Failed to check existence for collection {collection_name}: {e}")
+            )
+            return False
