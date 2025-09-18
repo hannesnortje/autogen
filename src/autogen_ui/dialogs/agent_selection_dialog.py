@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from ..config import load_custom_agents
+
 logger = logging.getLogger(__name__)
 
 
@@ -206,9 +208,41 @@ class AgentSelectionDialog(QDialog):
             },
         ]
 
-        # TODO: Add custom agents from storage
-        # This would load from a config file or database
-        custom_agents = []
+        # Load custom agents from persistent storage
+        try:
+            custom_agents_data = load_custom_agents()
+            custom_agents = []
+
+            for agent_config in custom_agents_data:
+                # Convert from AgentConfigWidget format to dialog format
+                custom_agent = {
+                    "name": agent_config.get("name", "Unnamed Agent"),
+                    "description": agent_config.get("description", "Custom agent"),
+                    "role": agent_config.get("role", "general"),
+                    "type": "custom",
+                    "llm_config": {
+                        "model": agent_config.get("model", {}).get("name", "gpt-4"),
+                        "api_type": "custom",
+                        "temperature": agent_config.get("model", {}).get(
+                            "temperature", 0.7
+                        ),
+                    },
+                    "system_message": agent_config.get("model", {}).get(
+                        "system_prompt", ""
+                    ),
+                    "capabilities": [
+                        cap
+                        for cap, enabled in agent_config.get("capabilities", {}).items()
+                        if enabled
+                    ],
+                }
+                custom_agents.append(custom_agent)
+
+            logger.info(f"Loaded {len(custom_agents)} custom agents for selection")
+
+        except Exception as e:
+            logger.error(f"Failed to load custom agents: {e}")
+            custom_agents = []
 
         return presets + custom_agents
 

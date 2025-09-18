@@ -16,6 +16,9 @@
     "enable_ui_endpoints": true,
     "auto_open_browser": false
   },
+  "agents": {
+    "custom_agents": []
+  },
   "integration_mode": "hybrid",
   "project_root": "/media/hannesn/storage/Code"
 }

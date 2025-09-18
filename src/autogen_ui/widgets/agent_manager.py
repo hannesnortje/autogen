@@ -27,11 +27,16 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
+from ..config import save_custom_agent, load_custom_agents, delete_custom_agent
+
 logger = logging.getLogger(__name__)
 
 
 class AgentConfigWidget(QWidget):
     """Agent configuration form"""
+
+    # Signal emitted when an agent is saved
+    agent_saved = Signal(dict)
 
     def __init__(self):
         super().__init__()
@@ -217,13 +222,24 @@ class AgentConfigWidget(QWidget):
         layout.addLayout(button_layout)
 
     def save_agent(self):
-        """Save agent configuration"""
+        """Save agent configuration to persistent storage"""
         if not self.name_input.text().strip():
             QMessageBox.warning(self, "Warning", "Please enter an agent name")
             return
 
         config = self.get_agent_config()
-        QMessageBox.information(self, "Success", f"Agent '{config['name']}' saved")
+
+        try:
+            save_custom_agent(config)
+            QMessageBox.information(
+                self, "Success", f"Agent '{config['name']}' saved successfully"
+            )
+            # Emit signal to refresh agent list in parent widgets
+            self.agent_saved.emit(config)
+            logger.info(f"Saved custom agent: {config['name']}")
+        except Exception as e:
+            logger.error(f"Failed to save agent: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to save agent: {str(e)}")
 
     def test_agent(self):
         """Test agent configuration"""
@@ -372,6 +388,11 @@ class AgentManagerWidget(QWidget):
         self.new_agent_btn.clicked.connect(self.new_agent)
         actions_layout.addWidget(self.new_agent_btn)
 
+        self.duplicate_agent_btn = QPushButton("Duplicate")
+        self.duplicate_agent_btn.clicked.connect(self.duplicate_agent)
+        self.duplicate_agent_btn.setEnabled(False)
+        actions_layout.addWidget(self.duplicate_agent_btn)
+
         self.delete_agent_btn = QPushButton("Delete")
         self.delete_agent_btn.clicked.connect(self.delete_agent)
         self.delete_agent_btn.setEnabled(False)
@@ -385,6 +406,10 @@ class AgentManagerWidget(QWidget):
     def setup_right_panel(self, splitter):
         """Set up right panel with agent configuration"""
         self.agent_config = AgentConfigWidget()
+
+        # Connect signal to reload agents list when an agent is saved
+        self.agent_config.agent_saved.connect(self.on_agent_saved)
+
         splitter.addWidget(self.agent_config)
 
     def setup_presets(self):
@@ -468,20 +493,42 @@ class AgentManagerWidget(QWidget):
             self.presets_list.addItem(item)
 
     def load_agents(self):
-        """Load existing agents"""
-        # For now, just show placeholder
+        """Load existing custom agents from persistent storage"""
         self.agents_list.clear()
 
-        # Add some sample agents
-        sample_agents = [
-            {"name": "Assistant-1", "role": "general", "status": "active"},
-            {"name": "Code-Helper", "role": "developer", "status": "inactive"},
-        ]
+        try:
+            # Load custom agents from configuration
+            custom_agents = load_custom_agents()
 
-        for agent in sample_agents:
-            item = QListWidgetItem(f"{agent['name']} ({agent['role']})")
-            item.setData(Qt.UserRole, agent)
-            self.agents_list.addItem(item)
+            # Add custom agents to the list
+            for agent in custom_agents:
+                name = agent.get("name", "Unnamed Agent")
+                role = agent.get("role", "general")
+
+                item_text = f"🔧 {name} ({role})"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.UserRole, agent)
+                item.setToolTip(agent.get("description", "Custom agent"))
+                self.agents_list.addItem(item)
+
+            # Add status message if no custom agents exist
+            if not custom_agents:
+                placeholder_item = QListWidgetItem("No custom agents yet - create one!")
+                placeholder_item.setData(Qt.UserRole, None)
+                placeholder_item.setToolTip(
+                    "Use the form to create your first custom agent"
+                )
+                self.agents_list.addItem(placeholder_item)
+
+            logger.info(f"Loaded {len(custom_agents)} custom agents")
+
+        except Exception as e:
+            logger.error(f"Failed to load custom agents: {e}")
+            # Add error message to list
+            error_item = QListWidgetItem("⚠️ Error loading custom agents")
+            error_item.setData(Qt.UserRole, None)
+            error_item.setToolTip(f"Error: {str(e)}")
+            self.agents_list.addItem(error_item)
 
     def on_preset_selected(self, item):
         """Handle preset selection"""
@@ -494,28 +541,126 @@ class AgentManagerWidget(QWidget):
         agent = item.data(Qt.UserRole)
         if agent:
             self.delete_agent_btn.setEnabled(True)
-            # Load agent config (placeholder for now)
+            self.duplicate_agent_btn.setEnabled(True)
+            # Load agent config into the form
+            self.agent_config.set_agent_config(agent)
             self.agent_selected.emit(agent)
+
+    def on_agent_saved(self, agent_config):
+        """Handle agent saved signal - reload the agents list"""
+        self.load_agents()
+        # Emit the agent_created signal
+        self.agent_created.emit(agent_config)
 
     def new_agent(self):
         """Create new agent"""
         self.agent_config.reset_form()
         self.delete_agent_btn.setEnabled(False)
+        self.duplicate_agent_btn.setEnabled(False)
 
     def delete_agent(self):
-        """Delete selected agent"""
+        """Delete selected agent from persistent storage"""
         current_item = self.agents_list.currentItem()
         if current_item:
             agent = current_item.data(Qt.UserRole)
+            if not agent or not agent.get("name"):
+                return
+
+            agent_name = agent["name"]
             reply = QMessageBox.question(
                 self,
                 "Delete Agent",
-                f"Are you sure you want to delete agent '{agent['name']}'?",
+                f"Are you sure you want to delete agent '{agent_name}'?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
 
             if reply == QMessageBox.Yes:
-                self.agents_list.takeItem(self.agents_list.row(current_item))
-                self.delete_agent_btn.setEnabled(False)
-                self.agent_deleted.emit(agent["name"])
+                try:
+                    # Delete from persistent storage
+                    deleted = delete_custom_agent(agent_name)
+                    if deleted:
+                        # Reload the agents list to reflect changes
+                        self.load_agents()
+                        self.delete_agent_btn.setEnabled(False)
+                        self.duplicate_agent_btn.setEnabled(False)
+                        self.agent_deleted.emit(agent_name)
+
+                        # Clear the form
+                        self.agent_config.reset_form()
+
+                        QMessageBox.information(
+                            self,
+                            "Success",
+                            f"Agent '{agent_name}' deleted successfully",
+                        )
+                        logger.info(f"Deleted custom agent: {agent_name}")
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            "Warning",
+                            f"Agent '{agent_name}' was not found in storage",
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to delete agent {agent_name}: {e}")
+                    QMessageBox.critical(
+                        self, "Error", f"Failed to delete agent: {str(e)}"
+                    )
+
+    def duplicate_agent(self):
+        """Duplicate selected agent with a new name"""
+        current_item = self.agents_list.currentItem()
+        if current_item:
+            agent = current_item.data(Qt.UserRole)
+            if not agent or not agent.get("name"):
+                return
+
+            original_name = agent["name"]
+
+            # Create a copy of the agent config
+            duplicated_agent = dict(agent)
+
+            # Generate a new name
+            base_name = f"{original_name} - Copy"
+            new_name = base_name
+            counter = 1
+
+            # Check if name already exists and increment counter
+            existing_agents = load_custom_agents()
+            existing_names = [a.get("name", "") for a in existing_agents]
+
+            while new_name in existing_names:
+                counter += 1
+                new_name = f"{base_name} ({counter})"
+
+            duplicated_agent["name"] = new_name
+            duplicated_agent["description"] = (
+                f"Copy of {original_name}. " + duplicated_agent.get("description", "")
+            ).strip()
+
+            try:
+                # Save the duplicated agent
+                save_custom_agent(duplicated_agent)
+
+                # Reload agents list and select the new agent
+                self.load_agents()
+
+                # Find and select the newly created agent
+                for i in range(self.agents_list.count()):
+                    item = self.agents_list.item(i)
+                    item_agent = item.data(Qt.UserRole)
+                    if item_agent and item_agent.get("name") == new_name:
+                        self.agents_list.setCurrentItem(item)
+                        break
+
+                QMessageBox.information(
+                    self, "Success", f"Agent duplicated as '{new_name}'"
+                )
+
+                logger.info(f"Duplicated agent: {original_name} -> {new_name}")
+
+            except Exception as e:
+                logger.error(f"Failed to duplicate agent {original_name}: {e}")
+                QMessageBox.critical(
+                    self, "Error", f"Failed to duplicate agent: {str(e)}"
+                )
