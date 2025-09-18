@@ -117,11 +117,29 @@ class MemoryWorker(QThread):
     def _search(self):
         """Perform memory search"""
         try:
+
+            def _scope_from_collection(name: str) -> str:
+                n = (name or "").lower()
+                if n.startswith("autogen_project_"):
+                    return "project"
+                if n == "autogen_global":
+                    return "global"
+                if n == "autogen_agent":
+                    return "agent"
+                if n == "autogen_thread":
+                    return "thread"
+                if n == "autogen_objectives":
+                    return "objectives"
+                if n == "autogen_artifacts":
+                    return "artifacts"
+                return "project"
+
+            scope = _scope_from_collection(self.params.get("collection", ""))
             if self.local_mode and LocalMemoryClientCls is not None:
                 client = LocalMemoryClientCls.instance()
                 results = client.search(
                     query=self.params["query"],
-                    scope=self.params.get("collection", "project"),
+                    scope=scope,
                     limit=self.params.get("limit", 10),
                 )
                 # Transform to API-compatible shape if needed
@@ -143,7 +161,7 @@ class MemoryWorker(QThread):
                 f"{self.server_url}/memory/search",
                 json={
                     "query": self.params["query"],
-                    "collection": self.params["collection"],
+                    "scope": scope,
                     "k": self.params["limit"],
                 },
                 timeout=30,
@@ -976,7 +994,13 @@ class MemoryBrowserWidget(QWidget):
 
     def delete_selected_collection(self):
         """Delete the selected collection shown in the combo/tree."""
-        collection = self.collection_combo.currentText()
+        # Prefer the selection from the collections tree (tab UI)
+        selected_item = self.collections_tree.currentItem()
+        if selected_item is not None:
+            collection = selected_item.text(0)
+        else:
+            # Fallback to the search combo selection
+            collection = self.collection_combo.currentText()
         if not collection:
             QMessageBox.information(self, "Info", "No collection selected")
             return

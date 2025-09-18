@@ -52,7 +52,10 @@ class QdrantWrapper:
 
     def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
         """Get information about a specific collection."""
-        resp = self.session.get(self._url(f"/collections/{collection_name}"), timeout=5)
+        resp = self.session.get(
+            self._url(f"/collections/{collection_name}"),
+            timeout=5,
+        )
         resp.raise_for_status()
         data = resp.json()
         return data.get("result", {})
@@ -169,9 +172,17 @@ class QdrantWrapper:
         collection: str,
         point_id: str,
     ) -> Dict[str, Any]:
-        """Delete a specific point by ID."""
-        resp = self.session.delete(
-            self._url(f"/collections/{collection}/points/{point_id}"),
+        """Delete a specific point by ID.
+
+        Qdrant deletes points via POST to
+        "/collections/{collection}/points/delete" with a JSON body
+        specifying the point IDs. Using DELETE on a single point URL
+        is not supported across all versions and may return 404.
+        """
+        body = {"points": [point_id]}
+        resp = self.session.post(
+            self._url(f"/collections/{collection}/points/delete"),
+            json=body,
             params={"wait": "true"},
             timeout=10,
         )
