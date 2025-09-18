@@ -10,11 +10,11 @@ Pre-populates the global collection with foundational knowledge including:
 
 from __future__ import annotations
 
+import uuid
 from typing import Dict, List
-
-from autogen_mcp.memory_collections import CollectionManager, MemoryEvent, MemoryScope
-from autogen_mcp.embeddings import EmbeddingService
-from autogen_mcp.observability import get_logger
+from .memory_collections import CollectionManager, MemoryScope, MemoryEvent
+from .embeddings import EmbeddingService
+from .observability import get_logger
 
 
 class KnowledgeSeeder:
@@ -24,6 +24,41 @@ class KnowledgeSeeder:
         self.collection_manager = collection_manager
         self.embedding_service = EmbeddingService()
         self.logger = get_logger("autogen.knowledge_seeder")
+
+    def _generate_stable_id(self, content: str, category: str) -> str:
+        """Generate stable UUID for seeded knowledge based on content and category."""
+        # Create a deterministic hash from content and category
+        combined = f"{category}:{content[:100]}"  # Use first 100 chars
+
+        # Create a UUID5 from the hash (deterministic UUID)
+        namespace = uuid.UUID("12345678-1234-5678-1234-123456789abc")
+        stable_uuid = uuid.uuid5(namespace, combined)
+        return str(stable_uuid)
+
+    def _is_already_seeded(self) -> bool:
+        """Check if global collection already contains seeded knowledge."""
+        try:
+            collection_name = self.collection_manager.get_collection_name(
+                MemoryScope.GLOBAL
+            )
+
+            # Use scroll to find seeded items with the metadata tag
+            results = self.collection_manager.qdrant.scroll(
+                collection=collection_name,
+                must=[{"key": "seeded", "match": {"value": True}}],
+                limit=20,
+                with_payload=True,
+            )
+
+            seeded_count = len(results.get("result", {}).get("points", []))
+            self.logger.info(f"Found {seeded_count} seeded items in global collection")
+
+            # If we have more than 10 seeded items, consider it already seeded
+            return seeded_count > 10
+
+        except Exception as e:
+            self.logger.warning(f"Could not check seeded status: {e}")
+            return False  # Assume not seeded if we can't check
 
     def get_global_knowledge(self) -> List[Dict[str, any]]:
         """Get all foundational knowledge to seed in global collection."""
@@ -564,6 +599,21 @@ class KnowledgeSeeder:
         """Seed the global collection with foundational knowledge."""
         self.logger.info("Starting global knowledge seeding")
 
+        # Check if already seeded to prevent duplicates
+        if self._is_already_seeded():
+            self.logger.info("Global collection already seeded, skipping")
+            return {
+                "collection": self.collection_manager.get_collection_name(
+                    MemoryScope.GLOBAL
+                ),
+                "status": "skipped",
+                "reason": "already_seeded",
+                "seeded_count": 0,
+                "total_items": len(self.get_global_knowledge()),
+                "errors": [],
+                "success": True,
+            }
+
         # Ensure global collection exists
         collection_name = self.collection_manager.ensure_collection(MemoryScope.GLOBAL)
 
@@ -573,7 +623,10 @@ class KnowledgeSeeder:
 
         for item in knowledge_items:
             try:
-                # Create memory event with proper structure
+                # Generate stable ID for deduplication
+                stable_id = self._generate_stable_id(item["content"], item["category"])
+
+                # Create memory event with proper structure and stable ID
                 event = MemoryEvent(
                     content=item["content"],
                     scope=MemoryScope.GLOBAL,
@@ -587,6 +640,9 @@ class KnowledgeSeeder:
                         "seeded_at": "2025-09-12T16:00:00Z",  # Current date
                     },
                 )
+
+                # Override the random ID with our stable one
+                event.event_id = stable_id
 
                 # Generate embedding for the content
                 event.vector = self.embedding_service.encode_one(event.content)
