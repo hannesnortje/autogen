@@ -5,7 +5,7 @@ Browse and search Qdrant memory collections
 
 import logging
 import requests
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, cast
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -33,11 +33,17 @@ from PySide6.QtGui import QFont
 
 logger = logging.getLogger(__name__)
 
+# Optional import: local mode support (runtime optional,
+# keep type-checkers happy)
+LocalMemoryClientCls: Any
 try:
-    # Optional import: local mode support
-    from autogen_ui.local_memory_client import LocalMemoryClient
+    from autogen_ui.local_memory_client import (
+        LocalMemoryClient as _LocalMemoryClient,
+    )
+
+    LocalMemoryClientCls = _LocalMemoryClient
 except Exception:
-    LocalMemoryClient = None  # type: ignore[assignment]
+    LocalMemoryClientCls = None
 
 
 class MemoryWorker(QThread):
@@ -48,6 +54,12 @@ class MemoryWorker(QThread):
     collections_completed = Signal(list)
     upload_completed = Signal(dict)
     error_occurred = Signal(str)
+
+    # Attribute declarations for strict type checking
+    server_url: str
+    operation: Optional[str]
+    params: Dict[str, Any]
+    local_mode: bool
 
     def __init__(self, server_url: str):
         super().__init__()
@@ -105,8 +117,8 @@ class MemoryWorker(QThread):
     def _search(self):
         """Perform memory search"""
         try:
-            if self.local_mode and LocalMemoryClient is not None:
-                client = LocalMemoryClient.instance()
+            if self.local_mode and LocalMemoryClientCls is not None:
+                client = LocalMemoryClientCls.instance()
                 results = client.search(
                     query=self.params["query"],
                     scope=self.params.get("collection", "project"),
@@ -148,8 +160,8 @@ class MemoryWorker(QThread):
     def _get_stats(self):
         """Get memory statistics"""
         try:
-            if self.local_mode and LocalMemoryClient is not None:
-                client = LocalMemoryClient.instance()
+            if self.local_mode and LocalMemoryClientCls is not None:
+                client = LocalMemoryClientCls.instance()
                 stats = client.get_stats()
                 self.stats_completed.emit(stats)
                 return
@@ -169,8 +181,8 @@ class MemoryWorker(QThread):
     def _get_collections(self):
         """Get available collections"""
         try:
-            if self.local_mode and LocalMemoryClient is not None:
-                client = LocalMemoryClient.instance()
+            if self.local_mode and LocalMemoryClientCls is not None:
+                client = LocalMemoryClientCls.instance()
                 collections = client.list_collections()
                 self.collections_completed.emit(collections)
                 return
@@ -196,9 +208,9 @@ class MemoryWorker(QThread):
             project = self.params["project"]
             scope = self.params["scope"]
 
-            if self.local_mode and LocalMemoryClient is not None:
+            if self.local_mode and LocalMemoryClientCls is not None:
                 # Use in-process client
-                client = LocalMemoryClient.instance()
+                client = LocalMemoryClientCls.instance()
                 result = client.upload_markdown(file_path, project, scope)
                 self.upload_completed.emit(result)
                 return
@@ -241,6 +253,12 @@ class MemoryBrowserWidget(QWidget):
     """Advanced memory browser with search and analytics"""
 
     memory_selected = Signal(dict)
+
+    # Attribute declarations for strict type checking
+    server_url: str
+    worker: MemoryWorker
+    collections: List[str]
+    current_results: List[Dict[str, Any]]
 
     def __init__(self, server_url: str):
         super().__init__()
@@ -372,6 +390,15 @@ class MemoryBrowserWidget(QWidget):
         self.clear_btn.clicked.connect(self.clear_results)
         self.clear_btn.setMaximumWidth(100)
         header_layout.addWidget(self.clear_btn)
+
+        # Delete selected result button
+        self.delete_result_btn = QPushButton("Delete Selected")
+        self.delete_result_btn.setToolTip(
+            "Delete the selected memory entry (point) from its collection"
+        )
+        self.delete_result_btn.setMaximumWidth(130)
+        self.delete_result_btn.clicked.connect(self.delete_selected_result)
+        header_layout.addWidget(self.delete_result_btn)
 
         results_layout.addLayout(header_layout)
 
@@ -538,6 +565,14 @@ class MemoryBrowserWidget(QWidget):
         refresh_collections_btn = QPushButton("Refresh Collections")
         refresh_collections_btn.clicked.connect(self.refresh_collections)
         actions_layout.addWidget(refresh_collections_btn)
+
+        # Delete collection button
+        delete_collection_btn = QPushButton("Delete Collection")
+        delete_collection_btn.setToolTip(
+            "Delete the selected collection (cannot be undone)"
+        )
+        delete_collection_btn.clicked.connect(self.delete_selected_collection)
+        actions_layout.addWidget(delete_collection_btn)
 
         actions_layout.addStretch()
         collections_layout.addLayout(actions_layout)
@@ -715,8 +750,8 @@ class MemoryBrowserWidget(QWidget):
         # Normalize to names list for the combo box
         names: List[str] = []
         if collections and isinstance(collections[0], dict):
-            # type: ignore[index] for heterogeneous list typing at runtime
-            names = [c.get("name", "") for c in collections]
+            col_dicts = cast(List[Dict], collections)
+            names = [str(c.get("name", "")) for c in col_dicts]
         else:
             names = [str(c) for c in collections]
 
@@ -737,11 +772,12 @@ class MemoryBrowserWidget(QWidget):
         # Update collections tree with details if available
         self.collections_tree.clear()
         if collections and isinstance(collections[0], dict):
-            for col in collections:  # type: ignore[assignment]
-                name = col.get("name", "unknown")
+            col_dicts = cast(List[Dict], collections)
+            for col in col_dicts:
+                name = str(col.get("name", "unknown"))
                 docs = str(col.get("documents", 0))
                 vecs = str(col.get("vectors", 0))
-                status = col.get("status", "Active")
+                status = str(col.get("status", "Active"))
                 item = QTreeWidgetItem([name, docs, vecs, status])
                 self.collections_tree.addTopLevelItem(item)
         else:
@@ -879,3 +915,101 @@ class MemoryBrowserWidget(QWidget):
 
         # Refresh data to show updated statistics
         self.refresh_data()
+
+    def delete_selected_result(self):
+        """Delete the selected result (point) from its collection."""
+        current_row = self.results_table.currentRow()
+        if not (0 <= current_row < len(self.current_results)):
+            QMessageBox.information(self, "Info", "Please select a result row first")
+            return
+
+        result = self.current_results[current_row]
+        point_id = result.get("id") or result.get("payload", {}).get("id")
+        # Infer collection by scope and project
+        # scope might be used later for inference; not required for delete here
+        # scope = (
+        #     result.get("payload", {}).get("scope")
+        #     or result.get("payload", {}).get("collection", "project")
+        # )
+        collection = self.collection_combo.currentText()
+        if not point_id or not collection:
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "Couldn't determine point ID or collection to delete.",
+            )
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete point {point_id} from {collection}?",
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            if self.local_mode_cb.isChecked() and LocalMemoryClientCls is not None:
+                client = LocalMemoryClientCls.instance()
+                resp = client.delete_point(collection, str(point_id))
+            else:
+                # HTTP delete
+                import requests as _rq
+
+                url = f"{self.server_url}/memory/point/{collection}/{point_id}"
+                r = _rq.delete(url, timeout=15)
+                if r.status_code != 200:
+                    raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
+                resp = r.json()
+
+            QMessageBox.information(
+                self,
+                "Deleted",
+                resp.get("message", "Point deleted"),
+            )
+            # Remove from results table view
+            self.results_table.removeRow(current_row)
+            self.current_results.pop(current_row)
+            self.refresh_data()
+        except Exception as e:
+            QMessageBox.critical(self, "Delete Failed", str(e))
+
+    def delete_selected_collection(self):
+        """Delete the selected collection shown in the combo/tree."""
+        collection = self.collection_combo.currentText()
+        if not collection:
+            QMessageBox.information(self, "Info", "No collection selected")
+            return
+
+        confirm = QMessageBox.warning(
+            self,
+            "Confirm Collection Delete",
+            f"Delete entire collection '{collection}'? This cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        try:
+            if self.local_mode_cb.isChecked() and LocalMemoryClientCls is not None:
+                client = LocalMemoryClientCls.instance()
+                resp = client.delete_collection(collection)
+            else:
+                # HTTP delete
+                import requests as _rq
+
+                url = f"{self.server_url}/memory/collection/{collection}"
+                r = _rq.delete(url, params={"confirm": "true"}, timeout=20)
+                if r.status_code != 200:
+                    raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
+                resp = r.json()
+
+            QMessageBox.information(
+                self,
+                "Collection Deleted",
+                resp.get("message", "Collection deleted"),
+            )
+            self.refresh_collections()
+            self.refresh_stats()
+        except Exception as e:
+            QMessageBox.critical(self, "Delete Failed", str(e))

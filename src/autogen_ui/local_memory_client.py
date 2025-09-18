@@ -294,3 +294,38 @@ class LocalMemoryClient:
                 f"{collections_ready} active collections"
             ),
         }
+
+    # --- Delete operations (local) ---
+
+    def delete_point(self, collection: str, point_id: str) -> dict:
+        """Delete a single point from a collection locally."""
+        result = self._collection_manager.qdrant.delete_point(collection, point_id)
+        return {
+            "success": True,
+            "deleted_count": 1,
+            "message": f"Deleted point {point_id} from {collection}",
+            "result": result,
+        }
+
+    def delete_collection(self, collection: str) -> dict:
+        """Delete an entire collection locally."""
+        # Try to get points count for a nicer message
+        try:
+            info = self._collection_manager.qdrant.get_collection_info(collection)
+            points = 0
+            if hasattr(info, "points_count"):
+                points = info.points_count
+            elif isinstance(info, dict) and "points_count" in info:
+                points = info["points_count"]
+        except Exception:
+            points = 0
+
+        result = self._collection_manager.qdrant.delete_collection(collection)
+        return {
+            "success": True,
+            "deleted_count": points,
+            "message": (
+                f"Collection {collection} deleted with {points} points removed"
+            ),
+            "result": result,
+        }
