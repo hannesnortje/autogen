@@ -84,24 +84,30 @@ poetry run python ui_control.py launch         # Launch UI manually (if server r
 - **Independent Processes**: UI and server run separately - UI can close without affecting server
 - **Direct Integration**: UI uses Python imports for optimal performance (not HTTP endpoints)
 - **Port 9000**: Server runs on port 9000 for both API and UI access
+- **Automatic Dependencies**: Qdrant vector database auto-starts with the server
 - **Flexible Deployment**: Server can run headless for production, with UI for development
+
+### Qdrant Auto-Start
+The launcher automatically manages Qdrant dependencies:
+- **Smart Detection**: Checks if Qdrant is already running
+- **Auto-Start**: Starts Qdrant via docker-compose if needed
+- **Health Waiting**: Waits for Qdrant to be ready before starting MCP server
+- **Clean Shutdown**: Stops Qdrant when launcher exits (if it started it)
+- **No Manual Setup**: No need to run `docker compose up -d` manually
 
 For detailed UI documentation, see [`PYSIDE6_UI_IMPLEMENTATION.md`](PYSIDE6_UI_IMPLEMENTATION.md).
 
 ## Onboarding & Quick Start
 1. **Install Poetry:** https://python-poetry.org/docs/
-2. **Clone the repo:**
+2. **Install Docker:** https://docs.docker.com/get-docker/ (for Qdrant database)
+3. **Clone the repo:**
    ```bash
    git clone <repo-url>
    cd autogen
    ```
-3. **Install dependencies:**
+4. **Install dependencies:**
    ```bash
    poetry install
-   ```
-4. **Start Qdrant:**
-   ```bash
-   docker compose up -d
    ```
 5. **Copy and edit .env:**
    ```bash
@@ -114,15 +120,18 @@ For detailed UI documentation, see [`PYSIDE6_UI_IMPLEMENTATION.md`](PYSIDE6_UI_I
    ```
 7. **Start the application:**
    ```bash
-   # Option 1: MCP server + Desktop UI (auto-launch enabled)
+   # Option 1: MCP server + Desktop UI + Qdrant (all auto-start)
    poetry run python launch.py
 
-   # Option 2: MCP server only
+   # Option 2: MCP server only + Qdrant (auto-start)
    poetry run python launch.py --server-only
 
-   # Option 3: CLI dashboard (legacy)
+   # Option 3: CLI dashboard (legacy, requires manual Qdrant)
+   docker compose up -d  # Start Qdrant manually for CLI
    poetry run python -m autogen_mcp.cli_dashboard
    ```
+
+**Note**: Qdrant database starts automatically with the launcher - no manual `docker compose up -d` needed!
 
 ## Poetry Workflow
 - **Run tests:** `poetry run pytest`
