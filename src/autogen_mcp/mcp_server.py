@@ -38,6 +38,15 @@ memory_service = MultiScopeMemoryService(collection_manager)
 knowledge_seeder = KnowledgeSeeder(collection_manager)
 hybrid_search = HybridSearchService(HybridConfig())
 
+# Initialize memory service with collections
+logger.info("Initializing memory service...")
+try:
+    init_result = memory_service.initialize()
+    logger.info("Memory service initialized successfully", extra={"extra": init_result})
+except Exception as e:
+    logger.error(f"Failed to initialize memory service: {e}")
+    # Continue anyway - some endpoints might still work
+
 # Initialize artifact memory and cross-project learning services
 artifact_service = ArtifactMemoryService(memory_service)
 cross_project_service = CrossProjectLearningService(memory_service, artifact_service)
