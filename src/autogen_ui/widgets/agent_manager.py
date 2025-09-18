@@ -189,10 +189,34 @@ class AgentConfigWidget(QWidget):
         self.memory_enabled_cb = QCheckBox("Enable Memory Integration")
         memory_layout.addRow("Memory:", self.memory_enabled_cb)
 
-        # Memory scope
-        self.memory_scope_combo = QComboBox()
-        self.memory_scope_combo.addItems(["conversation", "project", "global"])
-        memory_layout.addRow("Memory Scope:", self.memory_scope_combo)
+        # Memory scopes (multiple selection)
+        scopes_label = QLabel("Memory Scopes:")
+        scopes_widget = QWidget()
+        scopes_layout = QVBoxLayout(scopes_widget)
+        scopes_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create checkboxes for each scope
+        self.memory_scopes = {}
+        scope_descriptions = {
+            "global": "System-wide knowledge (coding standards, best practices)",
+            "project": "Project-specific context (ADRs, APIs, known issues)",
+            "agent": "Agent-specific memory (preferences, capabilities)",
+            "thread": "Conversation context (messages, decisions, TODOs)",
+            "objectives": "Goals and milestones (sprint goals, OKRs)",
+            "artifacts": "Development artifacts (commits, PRs, builds)",
+        }
+
+        for scope, description in scope_descriptions.items():
+            cb = QCheckBox(scope.title())
+            cb.setToolTip(description)
+            self.memory_scopes[scope] = cb
+            scopes_layout.addWidget(cb)
+
+        # Default selections (common combinations)
+        self.memory_scopes["project"].setChecked(True)
+        self.memory_scopes["thread"].setChecked(True)
+
+        memory_layout.addRow(scopes_label, scopes_widget)
 
         # Memory retrieval limit
         self.memory_limit_spin = QSpinBox()
@@ -265,7 +289,12 @@ class AgentConfigWidget(QWidget):
         self.max_tokens_spin.setValue(2048)
         self.system_prompt.clear()
         self.memory_enabled_cb.setChecked(False)
-        self.memory_scope_combo.setCurrentIndex(0)
+        # Clear all memory scope checkboxes
+        for cb in self.memory_scopes.values():
+            cb.setChecked(False)
+        # Set default scopes
+        self.memory_scopes["project"].setChecked(True)
+        self.memory_scopes["thread"].setChecked(True)
         self.memory_limit_spin.setValue(10)
 
     def get_agent_config(self) -> Dict[str, Any]:
@@ -289,7 +318,9 @@ class AgentConfigWidget(QWidget):
             },
             "memory": {
                 "enabled": self.memory_enabled_cb.isChecked(),
-                "scope": self.memory_scope_combo.currentText(),
+                "scopes": [
+                    scope for scope, cb in self.memory_scopes.items() if cb.isChecked()
+                ],
                 "retrieval_limit": self.memory_limit_spin.value(),
             },
         }
@@ -319,7 +350,22 @@ class AgentConfigWidget(QWidget):
 
         memory = config.get("memory", {})
         self.memory_enabled_cb.setChecked(memory.get("enabled", False))
-        self.memory_scope_combo.setCurrentText(memory.get("scope", "conversation"))
+
+        # Handle both old single scope and new multiple scopes format
+        memory_scopes = memory.get("scopes", [])
+        if not memory_scopes and "scope" in memory:
+            # Backward compatibility: convert single scope to list
+            memory_scopes = [memory["scope"]]
+
+        # Clear all checkboxes first
+        for cb in self.memory_scopes.values():
+            cb.setChecked(False)
+
+        # Set selected scopes
+        for scope in memory_scopes:
+            if scope in self.memory_scopes:
+                self.memory_scopes[scope].setChecked(True)
+
         self.memory_limit_spin.setValue(memory.get("retrieval_limit", 10))
 
 
