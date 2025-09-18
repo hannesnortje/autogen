@@ -159,7 +159,19 @@ class CollectionManager:
         """Ensure a collection exists for the given scope."""
         collection_name = self.get_collection_name(scope, project_id)
 
+        self.logger.info(
+            f"Ensuring collection exists: {collection_name}",
+            extra={
+                "extra": {
+                    "scope": scope.value,
+                    "project_id": project_id,
+                    "collection_name": collection_name,
+                }
+            },
+        )
+
         if collection_name in self._initialized_collections:
+            self.logger.debug(f"Collection {collection_name} already initialized")
             return collection_name
 
         schema = COLLECTION_SCHEMAS[scope]
@@ -167,7 +179,10 @@ class CollectionManager:
         try:
             # Check if collection already exists
             existing = self.qdrant.list_collections()
+            self.logger.info(f"Existing collections: {existing}")
+
             if collection_name not in existing:
+                self.logger.info(f"Creating new collection: {collection_name}")
                 self.qdrant.create_collection(
                     name=collection_name,
                     vector_size=schema.vector_size,
@@ -183,6 +198,8 @@ class CollectionManager:
                         }
                     },
                 )
+            else:
+                self.logger.info(f"Collection {collection_name} already exists")
 
             self._initialized_collections.add(collection_name)
             return collection_name

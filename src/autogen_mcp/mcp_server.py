@@ -935,8 +935,8 @@ async def upload_file_to_memory(
                 processed_count += 1
 
             except Exception as chunk_error:
-                logger.warning(
-                    "Failed to process chunk",
+                logger.error(
+                    "Failed to process chunk - detailed error",
                     extra={
                         "extra": {
                             "filename": file.filename,
@@ -944,9 +944,25 @@ async def upload_file_to_memory(
                                 "chunk_index", 0
                             ),
                             "error": str(chunk_error),
+                            "chunk_content_preview": (
+                                chunk["content"][:100] + "..."
+                                if len(chunk["content"]) > 100
+                                else chunk["content"]
+                            ),
+                            "memory_scope": memory_scope.value,
+                            "project": project,
+                            "thread_id": thread_id,
                         }
                     },
                 )
+                # Don't silently continue - if chunks are failing, we need to know why
+                # For debugging, let's re-raise the first few errors
+                if processed_count == 0:  # First chunk failed
+                    logger.error(f"First chunk failed with error: {chunk_error}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Memory write failed: {str(chunk_error)}",
+                    )
 
         logger.info(
             "File upload completed",
