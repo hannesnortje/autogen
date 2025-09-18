@@ -554,7 +554,11 @@ class MemoryBrowserWidget(QWidget):
 
             # Content preview
             content = result.get("payload", {}).get("content", "No content")
-            content_preview = (content[:100] + "...") if len(content) > 100 else content
+            # Truncate long content for preview
+            if len(content) > 100:
+                content_preview = content[:100] + "..."
+            else:
+                content_preview = content
             content_item = QTableWidgetItem(content_preview)
             self.results_table.setItem(row, 1, content_item)
 
@@ -585,38 +589,88 @@ class MemoryBrowserWidget(QWidget):
         stats_text = "Memory Statistics\n"
         stats_text += "=" * 50 + "\n\n"
 
-        for collection, data in stats.items():
-            if isinstance(data, dict):
-                stats_text += f"Collection: {collection}\n"
-                stats_text += f"  Documents: {data.get('documents_count', 0)}\n"
-                stats_text += f"  Vectors: {data.get('vectors_count', 0)}\n"
-                stats_text += f"  Points: {data.get('points_count', 0)}\n"
-                stats_text += f"  Indexed: {data.get('indexed_vectors_count', 0)}\n"
-                stats_text += "\n"
+        # New simplified stats format from API
+        if isinstance(stats, dict) and (
+            "total_documents" in stats or "total_collections" in stats
+        ):
+            total_docs = stats.get("total_documents", 0)
+            total_cols = stats.get("total_collections", 0)
+            ready_cols = stats.get("collections_ready", 0)
+            status = stats.get("status", "unknown")
+            message = stats.get("message", "")
+
+            stats_text += f"Status: {status}\n"
+            stats_text += f"Total Collections: {total_cols}\n"
+            stats_text += f"Collections Ready: {ready_cols}\n"
+            stats_text += f"Total Documents: {total_docs}\n"
+            if message:
+                stats_text += f"Message: {message}\n"
+
+        else:
+            # Legacy per-collection dict format (backward compatibility)
+            for collection, data in stats.items():
+                if isinstance(data, dict):
+                    stats_text += f"Collection: {collection}\n"
+                    stats_text += f"  Documents: {data.get('documents_count', 0)}\n"
+                    stats_text += f"  Vectors: {data.get('vectors_count', 0)}\n"
+                    stats_text += f"  Points: {data.get('points_count', 0)}\n"
+                    stats_text += f"  Indexed: {data.get('indexed_vectors_count', 0)}\n"
+                    stats_text += "\n"
 
         self.stats_text.setPlainText(stats_text)
 
-    def on_collections_completed(self, collections: List[str]):
-        """Handle collections list completion"""
-        self.collections = collections
+    def on_collections_completed(self, collections: List[Dict] | List[str]):
+        """Handle collections list completion
+
+        Supports both formats:
+        - List[str]: ["collection_a", "collection_b", ...]
+                        - List[dict]:
+                            {"name": str, "documents": int,
+                             "vectors": int, "status": str}, ...
+        """
+        # Normalize to names list for the combo box
+        names: List[str] = []
+        if collections and isinstance(collections[0], dict):
+            # type: ignore[index] for heterogeneous list typing at runtime
+            names = [c.get("name", "") for c in collections]
+        else:
+            names = [str(c) for c in collections]
+
+        self.collections = names
 
         # Update combo box
         current_selection = self.collection_combo.currentText()
         self.collection_combo.clear()
-        self.collection_combo.addItems(collections)
+        self.collection_combo.addItems(names)
 
         # Restore selection if possible
-        if current_selection in collections:
-            index = collections.index(current_selection)
+        if current_selection in names:
+            index = names.index(current_selection)
             self.collection_combo.setCurrentIndex(index)
-        elif collections:
+        elif names:
             self.collection_combo.setCurrentIndex(0)
 
-        # Update collections tree
+        # Update collections tree with details if available
         self.collections_tree.clear()
-        for collection in collections:
-            item = QTreeWidgetItem([collection, "Loading...", "Loading...", "Active"])
-            self.collections_tree.addTopLevelItem(item)
+        if collections and isinstance(collections[0], dict):
+            for col in collections:  # type: ignore[assignment]
+                name = col.get("name", "unknown")
+                docs = str(col.get("documents", 0))
+                vecs = str(col.get("vectors", 0))
+                status = col.get("status", "Active")
+                item = QTreeWidgetItem([name, docs, vecs, status])
+                self.collections_tree.addTopLevelItem(item)
+        else:
+            for name in names:
+                item = QTreeWidgetItem(
+                    [
+                        name,
+                        "Loading...",
+                        "Loading...",
+                        "Active",
+                    ]
+                )
+                self.collections_tree.addTopLevelItem(item)
 
     def on_error_occurred(self, error: str):
         """Handle worker errors"""
@@ -666,7 +720,10 @@ class MemoryBrowserWidget(QWidget):
     def browse_files(self):
         """Open file dialog to select markdown files"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Markdown File", "", "Markdown files (*.md);;All files (*.*)"
+            self,
+            "Select Markdown File",
+            "",
+            "Markdown files (*.md);;All files (*.*)",
         )
 
         if file_path:
@@ -722,7 +779,10 @@ class MemoryBrowserWidget(QWidget):
         QMessageBox.information(
             self,
             "Upload Successful",
-            f"Successfully uploaded {filename}\nProcessed {chunks} chunks\n\n{message}",
+            (
+                f"Successfully uploaded {filename}\n"
+                f"Processed {chunks} chunks\n\n{message}"
+            ),
         )
 
         # Refresh data to show updated statistics

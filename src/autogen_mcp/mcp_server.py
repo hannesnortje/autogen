@@ -15,8 +15,8 @@ from fastapi import (
     UploadFile,
     File,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 from autogen_mcp.multi_memory import MultiScopeMemoryService
 from autogen_mcp.memory_collections import CollectionManager, MemoryScope
 from autogen_mcp.knowledge_seeder import KnowledgeSeeder
@@ -95,6 +95,15 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 app = FastAPI(title="AutoGen MCP Server")
+
+# Add CORS middleware to allow UI access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your UI domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
@@ -1274,73 +1283,63 @@ async def get_memory_stats():
             }
 
         # Get basic collection stats
-        stats = {}
         total_documents = 0
+        collections_ready = 0
+        total_collections = 0
 
-        # Get stats from Qdrant directly
-        for scope in [
-            "global",
-            "project",
-            "agent",
-            "thread",
-            "objectives",
-            "artifacts",
-        ]:
-            try:
-                collection_name = collection_manager.get_collection_name(
-                    getattr(MemoryScope, scope.upper()), None
-                )
+        # Get stats from all collections using same method as collections endpoint
+        try:
+            # Use the same method that works in collections endpoint
+            client = memory_service.collection_manager.client
+            collection_names = client.list_collections() or []
+            total_collections = len(collection_names)
 
-                # Check if collection exists before getting info
+            for collection_name in collection_names:
                 try:
-                    info = memory_service.collection_manager.client.get_collection(
-                        collection_name
-                    )
-                    stats[collection_name] = {
-                        "documents_count": info.points_count,
-                        "vectors_count": info.points_count,
-                        "points_count": info.points_count,
-                        "indexed_vectors_count": info.points_count,
-                        "status": "green" if info.status == "green" else "yellow",
-                    }
-                    total_documents += info.points_count
+                    # Get collection info using the method that works
+                    info = client.get_collection_info(collection_name)
+
+                    # Extract document count from the info structure
+                    points_count = 0
+                    if hasattr(info, "points_count"):
+                        points_count = info.points_count
+                    elif isinstance(info, dict) and "points_count" in info:
+                        points_count = info["points_count"]
+                    elif hasattr(info, "vectors_count"):
+                        points_count = info.vectors_count
+                    elif isinstance(info, dict) and "documents_count" in info:
+                        points_count = info["documents_count"]
+
+                    total_documents += points_count
+                    if points_count > 0:
+                        collections_ready += 1
+
                 except Exception as collection_error:
                     logger.debug(
-                        f"Collection {collection_name} not ready or doesn't exist: {collection_error}"
+                        f"Failed to get info for collection {collection_name}: "
+                        f"{collection_error}"
                     )
-                    stats[collection_name] = {
-                        "documents_count": 0,
-                        "vectors_count": 0,
-                        "points_count": 0,
-                        "indexed_vectors_count": 0,
-                        "status": "not_ready",
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to get stats for {scope}: {e}")
-                stats[f"autogen_{scope}"] = {
-                    "documents_count": 0,
-                    "vectors_count": 0,
-                    "points_count": 0,
-                    "indexed_vectors_count": 0,
-                    "status": "error",
-                }
+                    # Continue processing other collections
+                    continue
 
-        # Add summary stats
-        stats["summary"] = {
+        except Exception as e:
+            logger.warning(f"Failed to list collections for stats: {e}")
+            # Fallback: return basic stats
+            total_collections = 0
+            total_documents = 0
+            collections_ready = 0
+
+        # Return simple stats format expected by UI
+        result = {
+            "status": "ready" if total_documents > 0 else "empty",
+            "total_collections": total_collections,
             "total_documents": total_documents,
-            "collections_ready": len(
-                [
-                    s
-                    for s in stats.values()
-                    if isinstance(s, dict) and s.get("status") == "green"
-                ]
-            ),
-            "total_collections": len(stats) - 1,  # Exclude the summary itself
-            "overall_status": "ready" if total_documents > 0 else "empty",
+            "collections_ready": collections_ready,
+            "message": f"Found {total_documents} documents in {collections_ready} active collections",
         }
 
         logger.info("Memory stats retrieved successfully")
-        return stats
+        return result
 
     except Exception as e:
         logger.error("Failed to get memory stats", extra={"extra": {"error": str(e)}})
@@ -1682,8 +1681,19 @@ async def startup_event():
         # Initialize all collections
         collection_manager.initialize_all_collections()
 
-        # Seed global knowledge
-        knowledge_seeder.seed_global_knowledge()
+        # Seed global knowledge only if explicitly enabled
+        seed_flag = os.getenv("AUTOGEN_SEED_GLOBAL", "false").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if seed_flag:
+            logger.info("Global knowledge seeding enabled via AUTOGEN_SEED_GLOBAL")
+            knowledge_seeder.seed_global_knowledge()
+        else:
+            logger.info(
+                "Skipping global knowledge seeding (set AUTOGEN_SEED_GLOBAL=true to enable)"
+            )
 
         # Start memory analytics monitoring
         await memory_analytics_service.start_monitoring()
