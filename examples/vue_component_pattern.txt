@@ -1,0 +1,41 @@
+Vue 3 Component with Composition API pattern stored in memory for AutoGen UI development:
+
+<template>
+  <div class="my-component">
+    <h2>{{ title }}</h2>
+    <p v-if="showContent">{{ content }}</p>
+    <button @click="toggleContent">{{ buttonText }}</button>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from "vue"
+
+const title = ref("My Component")
+const content = ref("This is dynamic content")
+const showContent = ref(true)
+
+const buttonText = computed(() =>
+  showContent.value ? "Hide Content" : "Show Content"
+)
+
+const toggleContent = () => {
+}
+</script>
+
+<style scoped>
+.my-component {
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+</style>

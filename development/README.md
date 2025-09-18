@@ -21,8 +21,9 @@ This directory contains development and debugging scripts used during the AutoGe
 ### Development Artifacts
 - `phase3_results.json` - Test results from Phase 3 validation
 - `AutogenSpecs_Expanded.md` - Expanded system specifications from early development
-- `MyComponent.vue` - Vue 3 component example from UI development
 - `server.log`, `server_output.log`, `server_test.log`, `server_ui_test.log` - Server runtime logs
+
+**Note**: `MyComponent.vue` was moved to memory system for agent pattern reuse. Vue component patterns are now available in the examples directory and stored in Qdrant global memory for agent access.
 
 ## Usage Notes
 
