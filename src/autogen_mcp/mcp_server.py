@@ -1353,6 +1353,65 @@ async def get_memory_stats():
         }
 
 
+@app.get("/collections")
+async def get_collections():
+    """Get available collections for UI"""
+    try:
+        logger.info("Getting collections list for UI")
+
+        # Check if memory service is initialized
+        if (
+            not hasattr(memory_service, "collection_manager")
+            or not memory_service.collection_manager
+        ):
+            logger.warning("Memory service not fully initialized")
+            return {"collections": []}
+
+        # Get collections from Qdrant
+        client = memory_service.collection_manager.client
+        if not client:
+            logger.warning("Qdrant client not available for collections")
+            return {"collections": []}
+
+        # List collections with their info
+        collections_info = []
+        try:
+            collections_response = client.get_collections()
+            if collections_response and hasattr(collections_response, "collections"):
+                for collection in collections_response.collections:
+                    collection_info = client.get_collection(collection.name)
+                    collections_info.append(
+                        {
+                            "name": collection.name,
+                            "documents": (
+                                collection_info.points_count if collection_info else 0
+                            ),
+                            "vectors": (
+                                collection_info.vectors_count if collection_info else 0
+                            ),
+                            "status": "ready",
+                        }
+                    )
+            else:
+                logger.warning("No collections found or unexpected response format")
+
+        except Exception as e:
+            logger.error(f"Error getting collection details: {str(e)}")
+            # Fallback to simple list
+            collection_names = client.list_collections() or []
+            for name in collection_names:
+                collections_info.append(
+                    {"name": name, "documents": 0, "vectors": 0, "status": "unknown"}
+                )
+
+        logger.info(f"Collections retrieved: {len(collections_info)} found")
+        return {"collections": collections_info}
+
+    except Exception as e:
+        logger.error("Failed to get collections", extra={"extra": {"error": str(e)}})
+        return {"collections": []}
+
+
 @app.get("/memory/analytics/report")
 async def get_memory_analytics_report():
     """Get comprehensive memory analytics report"""
