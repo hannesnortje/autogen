@@ -20,7 +20,7 @@ class MemoryService(QObject):
     Memory service that bridges the UI with the memory backend.
     Handles both HTTP API calls and direct local integration.
     """
-    
+
     # Signals for UI updates
     search_completed = Signal(list)
     stats_completed = Signal(dict)
@@ -33,27 +33,27 @@ class MemoryService(QObject):
         self.server_url = server_url
         self.local_mode = False
         self._initialized = False
-        
+
         # Local components (lazy loaded)
         self._collection_manager = None
         self._memory_service = None
-        
+
         logger.info("[UI] MemoryService initialized")
 
     async def initialize(self, local_mode: bool = False):
         """Initialize the memory service"""
         self.local_mode = local_mode
-        
+
         try:
             if local_mode:
                 await self._initialize_direct()
             else:
                 await self._initialize_http()
-                
+
             self._initialized = True
             self.initialization_completed.emit(True)
             logger.info("[UI] Memory service initialized successfully")
-            
+
         except Exception as e:
             error_msg = f"Failed to initialize memory service: {str(e)}"
             logger.error(f"[UI] {error_msg}")
@@ -66,12 +66,10 @@ class MemoryService(QObject):
         try:
             # Initialize collection manager
             self._collection_manager = CollectionManager()
-            
+
             # Initialize memory service
-            self._memory_service = MultiScopeMemoryService(
-                self._collection_manager
-            )
-            
+            self._memory_service = MultiScopeMemoryService(self._collection_manager)
+
             # Try to initialize collections - don't fail if Qdrant unavailable
             try:
                 # Only initialize collections, not seed global knowledge
@@ -79,12 +77,10 @@ class MemoryService(QObject):
                 self._memory_service._initialized = True
                 logger.info("[UI] Direct memory service initialized")
             except Exception as e:
-                logger.warning(
-                    f"[UI] Collections init failed, service available: {e}"
-                )
+                logger.warning(f"[UI] Collections init failed, service available: {e}")
                 # Mark as initialized anyway so searches can attempt to work
                 self._memory_service._initialized = True
-                
+
         except Exception as e:
             logger.error(f"[UI] Direct initialization failed: {e}")
             raise
@@ -92,7 +88,7 @@ class MemoryService(QObject):
     async def _initialize_http(self):
         """Initialize HTTP API integration"""
         import aiohttp
-        
+
         try:
             # Test connection to server
             async with aiohttp.ClientSession() as session:
@@ -101,10 +97,8 @@ class MemoryService(QObject):
                     if response.status == 200:
                         logger.info("[UI] HTTP memory service connected")
                     else:
-                        raise RuntimeError(
-                            f"Server returned status {response.status}"
-                        )
-                        
+                        raise RuntimeError(f"Server returned status {response.status}")
+
         except Exception as e:
             logger.error(f"[UI] HTTP initialization failed: {e}")
             raise
@@ -124,7 +118,7 @@ class MemoryService(QObject):
                 return await self._search_memory_direct(query, scope, limit)
             else:
                 return await self._search_memory_http(query, scope, limit)
-                
+
         except Exception as e:
             error_msg = f"Memory search failed: {str(e)}"
             logger.error(f"[UI] {error_msg}")
@@ -152,10 +146,10 @@ class MemoryService(QObject):
                 if n == "autogen_artifacts":
                     return "artifacts"
                 return "global"  # Default fallback
-                
+
             scope = _scope_from_collection(collection)
             logger.info(f"[UI] Searching collection '{collection}' -> scope '{scope}'")
-            
+
             # Set project ID if needed for project scope
             if scope == "project":
                 # Extract project ID from collection name
@@ -165,52 +159,53 @@ class MemoryService(QObject):
                         project_id = "default"
                     logger.info(f"[UI] Setting project ID: {project_id}")
                     self._memory_service.set_project(project_id)
-            
+
             # Use correct parameter name 'limit' for MultiScopeMemoryService
             results = self._memory_service.search(
                 query=query,
                 scope=scope,
-                limit=limit  # Changed from 'k' to 'limit' to match API
+                limit=limit,  # Changed from 'k' to 'limit' to match API
             )
-            
+
             # Transform results to expected format
             formatted_results = []
             for result in results:
-                formatted_results.append({
-                    "id": result.get("id"),
-                    "score": result.get("score", 0.0),
-                    "content": result.get("content", ""),  # Add content at top level
-                    "payload": {
-                        "content": result.get("content", ""),
-                        **result.get("metadata", {})
+                formatted_results.append(
+                    {
+                        "id": result.get("id"),
+                        "score": result.get("score", 0.0),
+                        "content": result.get(
+                            "content", ""
+                        ),  # Add content at top level
+                        "payload": {
+                            "content": result.get("content", ""),
+                            **result.get("metadata", {}),
+                        },
                     }
-                })
-                
+                )
+
             msg = f"Direct search returned {len(formatted_results)} results"
             logger.info(f"[UI] {msg}")
             return formatted_results
-            
+
         except Exception as e:
             logger.error(f"[UI] Direct search failed: {e}")
             raise
 
-    async def _search_http(
-        self, query: str, scope: str, limit: int
-    ) -> List[Dict]:
+    async def _search_http(self, query: str, scope: str, limit: int) -> List[Dict]:
         """HTTP API search"""
         import aiohttp
-        
+
         try:
             payload = {
                 "query": query,
                 "scope": scope,
-                "k": limit  # HTTP API expects 'k' parameter
+                "k": limit,  # HTTP API expects 'k' parameter
             }
-            
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.server_url}/memory/search",
-                    json=payload
+                    f"{self.server_url}/memory/search", json=payload
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -221,7 +216,7 @@ class MemoryService(QObject):
                     else:
                         text = await response.text()
                         raise RuntimeError(f"HTTP {response.status}: {text}")
-                        
+
         except Exception as e:
             logger.error(f"[UI] HTTP search failed: {e}")
             raise
@@ -237,7 +232,7 @@ class MemoryService(QObject):
                 return await self._get_collections_direct()
             else:
                 return await self._get_collections_http()
-                
+
         except Exception as e:
             error_msg = f"Failed to get collections: {str(e)}"
             logger.error(f"[UI] {error_msg}")
@@ -249,7 +244,7 @@ class MemoryService(QObject):
         try:
             if not self._collection_manager:
                 return []
-                
+
             # Get collection names
             collection_names = []
             try:
@@ -262,6 +257,7 @@ class MemoryService(QObject):
                 # Try direct Qdrant API as fallback
                 try:
                     import requests
+
                     url = "http://localhost:6333/collections"
                     response = requests.get(url, timeout=5)
                     if response.status_code == 200:
@@ -278,7 +274,7 @@ class MemoryService(QObject):
                 except Exception as api_error:
                     msg = f"[UI] Qdrant API fallback failed: {api_error}"
                     logger.warning(msg)
-                
+
                 # Final fallback to known collection names if all else fails
                 if not collection_names:
                     collection_names = [
@@ -286,7 +282,7 @@ class MemoryService(QObject):
                         "autogen_agent",
                         "autogen_thread",
                         "autogen_objectives",
-                        "autogen_artifacts"
+                        "autogen_artifacts",
                     ]
 
             # Format as expected by UI
@@ -296,6 +292,7 @@ class MemoryService(QObject):
                 doc_count = 0
                 try:
                     import requests
+
                     url = f"http://localhost:6333/collections/{name}"
                     response = requests.get(url, timeout=5)
                     if response.status_code == 200:
@@ -304,18 +301,20 @@ class MemoryService(QObject):
                         doc_count = result.get("points_count", 0)
                 except Exception as e:
                     logger.warning(f"[UI] Could not get count for {name}: {e}")
-                
-                collections.append({
-                    "name": name,
-                    "documents": doc_count,
-                    "vectors": doc_count,  # Assume same as documents
-                    "status": "Active"
-                })
-                
+
+                collections.append(
+                    {
+                        "name": name,
+                        "documents": doc_count,
+                        "vectors": doc_count,  # Assume same as documents
+                        "status": "Active",
+                    }
+                )
+
             msg = f"Direct collections returned {len(collections)} collections"
             logger.info(f"[UI] {msg}")
             return collections
-            
+
         except Exception as e:
             logger.error(f"[UI] Direct collections failed: {e}")
             raise
@@ -323,7 +322,7 @@ class MemoryService(QObject):
     async def _get_collections_http(self) -> List[Dict]:
         """Get collections via HTTP API"""
         import aiohttp
-        
+
         try:
             async with aiohttp.ClientSession() as session:
                 collections_url = f"{self.server_url}/collections"
@@ -343,7 +342,7 @@ class MemoryService(QObject):
                     else:
                         text = await response.text()
                         raise RuntimeError(f"HTTP {response.status}: {text}")
-                        
+
         except Exception as e:
             logger.error(f"[UI] HTTP collections failed: {e}")
             raise
@@ -359,7 +358,7 @@ class MemoryService(QObject):
                 return await self._get_stats_direct()
             else:
                 return await self._get_stats_http()
-                
+
         except Exception as e:
             error_msg = f"Failed to get memory stats: {str(e)}"
             logger.error(f"[UI] {error_msg}")
@@ -372,10 +371,8 @@ class MemoryService(QObject):
             collections = await self._get_collections_direct()
             total_docs = sum(c.get("documents", 0) for c in collections)
             total_collections = len(collections)
-            ready_collections = sum(
-                1 for c in collections if c.get("documents", 0) > 0
-            )
-            
+            ready_collections = sum(1 for c in collections if c.get("documents", 0) > 0)
+
             return {
                 "status": "ready" if total_docs > 0 else "empty",
                 "total_collections": total_collections,
@@ -384,9 +381,9 @@ class MemoryService(QObject):
                 "message": (
                     f"Found {total_docs} documents in {ready_collections} "
                     "active collections"
-                )
+                ),
             }
-            
+
         except Exception as e:
             logger.error(f"[UI] Direct stats failed: {e}")
             raise
@@ -394,7 +391,7 @@ class MemoryService(QObject):
     async def _get_stats_http(self) -> Dict:
         """Get stats via HTTP API"""
         import aiohttp
-        
+
         try:
             async with aiohttp.ClientSession() as session:
                 stats_url = f"{self.server_url}/memory/stats"
@@ -406,7 +403,7 @@ class MemoryService(QObject):
                     else:
                         text = await response.text()
                         raise RuntimeError(f"HTTP {response.status}: {text}")
-                        
+
         except Exception as e:
             logger.error(f"[UI] HTTP stats failed: {e}")
             raise

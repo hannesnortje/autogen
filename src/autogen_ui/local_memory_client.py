@@ -105,9 +105,7 @@ def _chunk_markdown_content(content: str, filename: str) -> List[Dict]:
                             "chunk_index": chunk_index,
                             "total_sections": len(combined_sections),
                             "type": "markdown_chunk",
-                            "upload_date": datetime.now(
-                                timezone.utc
-                            ).isoformat(),
+                            "upload_date": datetime.now(timezone.utc).isoformat(),
                         },
                     }
                 )
@@ -136,9 +134,7 @@ class LocalMemoryClient:
 
     def __init__(self) -> None:
         self._collection_manager = CollectionManager()
-        self._memory_service = MultiScopeMemoryService(
-            self._collection_manager
-        )
+        self._memory_service = MultiScopeMemoryService(self._collection_manager)
         # Ensure collections are initialized similar to the server,
         # but respect seeding gate via AUTOGEN_SEED_GLOBAL
         try:
@@ -169,9 +165,7 @@ class LocalMemoryClient:
             cls._instance = LocalMemoryClient()
         return cls._instance
 
-    def upload_markdown(
-        self, file_path: str, project: str, scope: str
-    ) -> Dict:
+    def upload_markdown(self, file_path: str, project: str, scope: str) -> Dict:
         """Upload a markdown file directly to memory (no HTTP)."""
         # Read content
         with open(file_path, "r", encoding="utf-8") as f:
@@ -302,9 +296,7 @@ class LocalMemoryClient:
         collections = self.list_collections()
         total_documents = sum(c.get("documents", 0) for c in collections)
         total_collections = len(collections)
-        collections_ready = sum(
-            1 for c in collections if c.get("documents", 0) > 0
-        )
+        collections_ready = sum(1 for c in collections if c.get("documents", 0) > 0)
         return {
             "status": "ready" if total_documents > 0 else "empty",
             "total_collections": total_collections,
@@ -320,9 +312,7 @@ class LocalMemoryClient:
 
     def delete_point(self, collection: str, point_id: str) -> dict:
         """Delete a single point from a collection locally."""
-        result = self._collection_manager.qdrant.delete_point(
-            collection, point_id
-        )
+        result = self._collection_manager.qdrant.delete_point(collection, point_id)
         return {
             "success": True,
             "deleted_count": 1,
@@ -334,9 +324,7 @@ class LocalMemoryClient:
         """Delete an entire collection locally."""
         # Try to get points count for a nicer message
         try:
-            info = self._collection_manager.qdrant.get_collection_info(
-                collection
-            )
+            info = self._collection_manager.qdrant.get_collection_info(collection)
             points = 0
             if hasattr(info, "points_count"):
                 points = info.points_count

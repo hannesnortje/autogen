@@ -18,10 +18,10 @@ async def test_memory_service():
     """Test the memory service functionality"""
     print("🧪 Testing Memory Service")
     print("=" * 50)
-    
+
     # Initialize memory service
     memory_service = MemoryService()
-    
+
     # Test local mode initialization
     print("1. Testing local mode initialization...")
     try:
@@ -30,20 +30,20 @@ async def test_memory_service():
     except Exception as e:
         print(f"   ❌ Local mode initialization failed: {e}")
         return False
-    
+
     # Test get collections
     print("2. Testing collections retrieval...")
     try:
         collections = await memory_service.get_collections()
         print(f"   ✅ Found {len(collections)} collections:")
         for collection in collections:
-            name = collection.get('name', 'unknown')
-            docs = collection.get('documents', 0)
+            name = collection.get("name", "unknown")
+            docs = collection.get("documents", 0)
             print(f"      - {name}: {docs} documents")
     except Exception as e:
         print(f"   ❌ Collections retrieval failed: {e}")
         return False
-    
+
     # Test get stats
     print("3. Testing stats retrieval...")
     try:
@@ -54,14 +54,12 @@ async def test_memory_service():
     except Exception as e:
         print(f"   ❌ Stats retrieval failed: {e}")
         return False
-    
+
     # Test search (should work even with empty collections)
     print("4. Testing memory search...")
     try:
         results = await memory_service.search_memory(
-            query="python programming",
-            scope="global",
-            limit=5
+            query="python programming", scope="global", limit=5
         )
         print(f"   ✅ Search completed with {len(results)} results")
         if results:
@@ -69,14 +67,14 @@ async def test_memory_service():
             result = results[0]
             print(f"      - ID: {result.get('id')}")
             print(f"      - Score: {result.get('score')}")
-            content = result.get('payload', {}).get('content', '')
+            content = result.get("payload", {}).get("content", "")
             if len(content) > 100:
                 content = content[:100] + "..."
             print(f"      - Content: {content}")
     except Exception as e:
         print(f"   ❌ Search failed: {e}")
         return False
-    
+
     print("\n🎉 All tests passed! Memory service is working correctly.")
     return True
 
