@@ -20,6 +20,7 @@ python-multipart = "^0.0.20"
 # Data export/import dependencies
 pandas = "^2.1.0"               # Data manipulation and export to CSV/Excel
 openpyxl = "^3.1.0"             # Excel file format support for pandas
+aiohttp = "^3.12.15"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

@@ -46,6 +46,12 @@ try:
 except Exception:
     LocalMemoryClientCls = None
 
+# Import the new memory service
+try:
+    from autogen_ui.services import MemoryService
+except ImportError:
+    MemoryService = None
+
 
 class MemoryWorker(QThread):
     """Worker thread for memory operations"""
@@ -297,6 +303,11 @@ class MemoryBrowserWidget(QWidget):
         self.collections = []
         self.current_results = []
 
+        # Initialize memory service if available
+        self.memory_service = None
+        if MemoryService is not None:
+            self.memory_service = MemoryService(server_url)
+
         self.setup_ui()
         self.setup_connections()
         self.setup_timer()
@@ -310,13 +321,10 @@ class MemoryBrowserWidget(QWidget):
 
         # Initialize Local mode default from env and sync toggles
         try:
-            default_local = os.getenv("AUTOGEN_UI_LOCAL_MODE", "false").lower() in (
-                "1",
-                "true",
-                "yes",
-            )
+            env_val = os.getenv("AUTOGEN_UI_LOCAL_MODE", "true")
+            default_local = env_val.lower() in ("1", "true", "yes")
         except Exception:
-            default_local = False
+            default_local = True
         if hasattr(self, "local_mode_status_cb"):
             self.local_mode_status_cb.setChecked(default_local)
         if hasattr(self, "local_mode_cb"):
@@ -663,6 +671,44 @@ class MemoryBrowserWidget(QWidget):
 
     def refresh_collections(self):
         """Refresh collections list"""
+        # Use memory service if available and in local mode
+        if (self.memory_service is not None and
+                hasattr(self, 'local_mode_cb') and
+                self.local_mode_cb.isChecked()):
+            try:
+                import asyncio
+                logger.info("[UI] Attempting to use memory service for collections")
+                
+                # Create new event loop for this operation
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Initialize memory service
+                logger.info("[UI] Initializing memory service...")
+                loop.run_until_complete(
+                    self.memory_service.initialize(local_mode=True)
+                )
+                
+                # Get collections
+                logger.info("[UI] Fetching collections from memory service...")
+                collections = loop.run_until_complete(
+                    self.memory_service.get_collections()
+                )
+                loop.close()
+                
+                logger.info(f"[UI] Memory service returned {len(collections)} collections")
+                
+                # Emit the result directly
+                self.on_collections_completed(collections)
+                return
+            except Exception as e:
+                logger.error(f"Memory service collection fetch failed: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Fall back to worker method
+        
+        logger.info("[UI] Using worker method for collections")
+        # Use original worker method as fallback
         self.worker.get_collections()
 
     def refresh_stats(self):
@@ -674,6 +720,36 @@ class MemoryBrowserWidget(QWidget):
         ):
             return  # Still in startup delay, skip this request
 
+        # Use memory service if available and in local mode
+        if (self.memory_service is not None and
+                hasattr(self, 'local_mode_cb') and
+                self.local_mode_cb.isChecked()):
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Initialize memory service if needed
+                not_init = not hasattr(self.memory_service, '_initialized')
+                if not_init or not self.memory_service._initialized:
+                    loop.run_until_complete(
+                        self.memory_service.initialize(local_mode=True)
+                    )
+                
+                # Get stats
+                stats = loop.run_until_complete(
+                    self.memory_service.get_stats()
+                )
+                loop.close()
+                
+                # Emit the result directly
+                self.on_stats_completed(stats)
+                return
+            except Exception as e:
+                logger.warning(f"Memory service stats fetch failed: {e}")
+                # Fall back to worker method
+        
+        # Use original worker method as fallback
         self.worker.get_stats()
 
     def perform_search(self):
@@ -692,6 +768,36 @@ class MemoryBrowserWidget(QWidget):
         self.results_label.setText("Searching...")
         self.search_btn.setEnabled(False)
 
+        # Use memory service if available and in local mode
+        if (self.memory_service is not None and
+                hasattr(self, 'local_mode_cb') and
+                self.local_mode_cb.isChecked()):
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Initialize memory service if needed
+                not_init = not hasattr(self.memory_service, '_initialized')
+                if not_init or not self.memory_service._initialized:
+                    loop.run_until_complete(
+                        self.memory_service.initialize(local_mode=True)
+                    )
+                
+                # Perform search
+                results = loop.run_until_complete(
+                    self.memory_service.search_memory(query, collection, limit)
+                )
+                loop.close()
+                
+                # Emit the result directly
+                self.on_search_completed(results)
+                return
+            except Exception as e:
+                logger.warning(f"Memory service search failed: {e}")
+                # Fall back to worker method
+        
+        # Use original worker method as fallback
         self.worker.search_memory(query, collection, limit)
 
     def clear_results(self):
