@@ -1376,24 +1376,40 @@ async def get_collections():
         # List collections with their info
         collections_info = []
         try:
-            collections_response = client.get_collections()
-            if collections_response and hasattr(collections_response, "collections"):
-                for collection in collections_response.collections:
-                    collection_info = client.get_collection(collection.name)
+            # Get list of collection names using correct QdrantWrapper method
+            collection_names = client.list_collections() or []
+
+            for collection_name in collection_names:
+                try:
+                    # Get detailed info for each collection using correct method
+                    collection_info = client.get_collection_info(collection_name)
+
+                    # Extract counts from the info dictionary
+                    points_count = collection_info.get("points_count", 0)
+                    vectors_count = collection_info.get("vectors_count", 0)
+
                     collections_info.append(
                         {
-                            "name": collection.name,
-                            "documents": (
-                                collection_info.points_count if collection_info else 0
-                            ),
-                            "vectors": (
-                                collection_info.vectors_count if collection_info else 0
-                            ),
+                            "name": collection_name,
+                            "documents": points_count,
+                            "vectors": vectors_count,
                             "status": "ready",
                         }
                     )
-            else:
-                logger.warning("No collections found or unexpected response format")
+
+                except Exception as collection_error:
+                    logger.warning(
+                        f"Error getting info for collection {collection_name}: {collection_error}"
+                    )
+                    # Add collection with unknown counts
+                    collections_info.append(
+                        {
+                            "name": collection_name,
+                            "documents": 0,
+                            "vectors": 0,
+                            "status": "unknown",
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"Error getting collection details: {str(e)}")

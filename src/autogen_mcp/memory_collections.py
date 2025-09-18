@@ -140,6 +140,11 @@ class CollectionManager:
         self.logger = get_logger("autogen.collections")
         self._initialized_collections = set()
 
+    @property
+    def client(self) -> QdrantWrapper:
+        """Provide access to the Qdrant client for compatibility."""
+        return self.qdrant
+
     def get_collection_name(
         self, scope: MemoryScope, project_id: Optional[str] = None
     ) -> str:
