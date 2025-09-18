@@ -1,6 +1,6 @@
 {
   "ui": {
-    "launch_mode": "never",
+    "launch_mode": "auto",
     "theme": "system",
     "window_geometry": {
       "width": 1200,
