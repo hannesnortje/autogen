@@ -24,10 +24,13 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QTextCursor
 
 from .widgets import MemoryBrowserWidget, AgentManagerWidget, SessionManagerWidget
+from .widgets.enhanced_conversation_widget import EnhancedConversationWidget
 from .widgets.notification_panel import NotificationPanel
 from .services.realtime_service import RealtimeService
 from .services.notification_service import NotificationService
 from .services.data_export_import_service import DataExportImportService
+from .services.conversation_service import ConversationService
+from .services.session_service import SessionService
 from .dialogs.data_export_import_dialogs import show_export_dialog, show_import_dialog
 
 logger = logging.getLogger(__name__)
@@ -268,112 +271,6 @@ class ServerWidget(QWidget):
             cursor.removeSelectedText()
 
 
-class ConversationWidget(QWidget):
-    """Simple conversation interface"""
-
-    def __init__(self):
-        super().__init__()
-        self.setup_ui()
-
-    def setup_ui(self):
-        """Set up conversation UI"""
-        layout = QVBoxLayout(self)
-
-        # Conversation display
-        conv_group = QGroupBox("Conversation")
-        conv_layout = QVBoxLayout(conv_group)
-
-        self.conversation_text = QTextEdit()
-        self.conversation_text.setReadOnly(True)
-        self.conversation_text.setPlaceholderText(
-            "AutoGen conversation will appear here...\n\n"
-            "Connect to server and start a new session to begin."
-        )
-        conv_layout.addWidget(self.conversation_text)
-
-        layout.addWidget(conv_group)
-
-        # Input area
-        input_group = QGroupBox("Your Message")
-        input_layout = QVBoxLayout(input_group)
-
-        self.message_input = QTextEdit()
-        self.message_input.setMaximumHeight(80)
-        self.message_input.setPlaceholderText("Type your message here...")
-        input_layout.addWidget(self.message_input)
-
-        button_layout = QHBoxLayout()
-        self.send_btn = QPushButton("Send Message")
-        self.send_btn.setEnabled(False)
-        self.send_btn.clicked.connect(self.send_message)
-        self.clear_btn = QPushButton("Clear")
-        self.clear_btn.clicked.connect(self.clear_conversation)
-
-        button_layout.addWidget(self.send_btn)
-        button_layout.addWidget(self.clear_btn)
-        input_layout.addLayout(button_layout)
-
-        layout.addWidget(input_group)
-
-    def clear_conversation(self):
-        """Clear the conversation"""
-        self.conversation_text.clear()
-        self.message_input.clear()
-
-    def send_message(self):
-        """Send message to agents via MCP server"""
-        message = self.message_input.toPlainText().strip()
-        if not message:
-            return
-
-        # Add user message to conversation
-        self.add_message("User", message)
-
-        # Clear input
-        self.message_input.clear()
-
-        # Try to send to MCP server
-        try:
-            # For now, simulate agent responses since full integration isn't implemented
-            self.add_message(
-                "Code Assistant",
-                "I'll help you create the ShopFlow e-commerce platform. "
-                "Let me start by setting up the project structure...",
-            )
-
-            self.add_message(
-                "Content Writer",
-                "I'll work on creating comprehensive documentation, "
-                "user stories, and project planning documents.",
-            )
-
-            self.add_message(
-                "Data Analyst",
-                "I'll design the analytics framework and help with "
-                "data modeling for the e-commerce platform.",
-            )
-
-            self.add_message(
-                "Research Assistant",
-                "I'll gather market research and competitive analysis "
-                "to inform our platform requirements.",
-            )
-
-        except Exception as e:
-            self.add_message("System", f"Error sending message: {e}")
-
-    def add_message(self, sender: str, message: str):
-        """Add a message to the conversation display"""
-        cursor = self.conversation_text.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertText(f"[{sender}]: {message}\n\n")
-        self.conversation_text.setTextCursor(cursor)
-
-        # Auto-scroll to bottom
-        scrollbar = self.conversation_text.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
-
-
 class AutoGenMainWindow(QMainWindow):
     """Clean, simple AutoGen main window"""
 
@@ -481,8 +378,8 @@ class AutoGenMainWindow(QMainWindow):
         self.session_manager = SessionManagerWidget(server_url)
         left_widget.addTab(self.session_manager, "Sessions")
 
-        # Middle - Conversation
-        self.conversation_widget = ConversationWidget()
+        # Middle - Conversation (using enhanced conversation widget with services)
+        self.conversation_widget = EnhancedConversationWidget(self.conversation_service)
 
         # Right side - Notifications panel
         # (Will be initialized after services are set up)
@@ -547,14 +444,15 @@ class AutoGenMainWindow(QMainWindow):
     def setup_services(self):
         """Initialize real-time and notification services"""
         server_config = self.config["server"]
+        server_url = f"http://{server_config['host']}:{server_config['port']}"
         ws_url = f"ws://{server_config['host']}:{server_config['port']}"
 
         # Initialize services
+        self.session_service = SessionService(server_url)
+        self.conversation_service = ConversationService(self.session_service)
         self.realtime_service = RealtimeService(ws_url)
         self.notification_service = NotificationService(self)
-        self.data_export_import_service = DataExportImportService(
-            f"http://{self.config['server']['host']}:{self.config['server']['port']}"  # noqa: E501
-        )
+        self.data_export_import_service = DataExportImportService(server_url)
 
         logger.info("Services initialized successfully")
 
@@ -578,6 +476,17 @@ class AutoGenMainWindow(QMainWindow):
         self.realtime_service.server_status_changed.connect(
             self.on_server_status_changed
         )
+
+        # Connect session manager signals to conversation widget
+        if hasattr(self, "session_manager"):
+            self.session_manager.session_started.connect(
+                lambda config: self.conversation_widget.set_session_id(
+                    config.get("session_id")
+                )
+            )
+            self.session_manager.session_ended.connect(
+                lambda session_id: self.conversation_widget.set_session_id(None)
+            )
 
         logger.info("Real-time service connections established")
 
