@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 class ServerWidget(QWidget):
-    """Simple server connection widget"""
+    """Enhanced server connection widget with reconnection logic"""
 
     connection_status_changed = Signal(bool)
 
@@ -45,27 +45,47 @@ class ServerWidget(QWidget):
             f"http://{config['server']['host']}:{config['server']['port']}"
         )
         self.connected = False
+        self.reconnecting = False
 
-        self.setup_ui()
+        # Reconnection settings
+        self.retry_attempts = 0
+        self.max_retry_attempts = 5
+        self.base_retry_delay = 2  # seconds
+        self.current_retry_delay = self.base_retry_delay
+        self.consecutive_failures = 0
+        self.last_successful_connection = None
+
+        # Setup timers first, then UI (since UI setup calls check_connection)
         self.setup_timer()
+        self.setup_ui()
 
     def setup_ui(self):
         """Set up the server widget UI"""
         layout = QVBoxLayout(self)
 
-        # Server info
-        self.status_label = QLabel("Server: Disconnected")
-        self.status_label.setStyleSheet("QLabel { color: red; font-weight: bold; }")
-        layout.addWidget(self.status_label)
+        # Connection status with info
+        status_layout = QHBoxLayout()
+
+        self.status_label = QLabel("Server: Checking...")
+        self.status_label.setStyleSheet("QLabel { font-weight: bold; }")
+        status_layout.addWidget(self.status_label)
+
+        # Connect button
+        self.connect_btn = QPushButton("Connect")
+        self.connect_btn.setMaximumWidth(100)
+        self.connect_btn.clicked.connect(self.manual_reconnect)
+        status_layout.addWidget(self.connect_btn)
+
+        layout.addLayout(status_layout)
 
         # Server URL
         url_label = QLabel(f"URL: {self.server_url}")
         layout.addWidget(url_label)
 
-        # Connect button
-        self.connect_btn = QPushButton("Connect")
-        self.connect_btn.clicked.connect(self.check_connection)
-        layout.addWidget(self.connect_btn)
+        # Connection info
+        self.info_label = QLabel("")
+        self.info_label.setStyleSheet("QLabel { color: gray; font-size: 10px; }")
+        layout.addWidget(self.info_label)
 
         # Server log
         log_group = QGroupBox("Server Status")
@@ -85,47 +105,160 @@ class ServerWidget(QWidget):
         """Set up timer for periodic connection checks"""
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_connection)
-        self.timer.start(10000)  # Check every 10 seconds
+        self.timer.start(5000)  # Check every 5 seconds (more responsive)
+
+        # Separate timer for reconnection attempts
+        self.reconnect_timer = QTimer()
+        self.reconnect_timer.setSingleShot(True)
+        self.reconnect_timer.timeout.connect(self.attempt_reconnection)
 
     def check_connection(self):
         """Check server connection status"""
         try:
-            response = requests.get(f"{self.server_url}/health", timeout=5)
+            response = requests.get(f"{self.server_url}/health", timeout=3)
             if response.status_code == 200:
+                # Connection successful
+                if not self.connected or self.reconnecting:
+                    # We've recovered from a disconnection
+                    self.reset_retry_state()
+                    self.log_message("✅ Connection restored!")
+
                 self.set_connected(True)
                 data = response.json()
-                self.log_message(f"✓ Server healthy: {data.get('status', 'OK')}")
+                status = data.get("status", "OK")
+                self.log_message(f"✓ Server healthy: {status}")
+
+                # Update last successful connection time
+                import datetime
+
+                self.last_successful_connection = datetime.datetime.now()
             else:
-                self.set_connected(False)
-                self.log_message(f"✗ Server error: {response.status_code}")
+                error_msg = f"Server error: {response.status_code}"
+                self.handle_connection_failure(error_msg)
         except Exception as e:
+            self.handle_connection_failure(f"Connection failed: {str(e)}")
+
+    def handle_connection_failure(self, error_message: str):
+        """Handle connection failure with smart reconnection logic"""
+        self.consecutive_failures += 1
+
+        if self.connected:
+            # First failure - log and mark as disconnected
             self.set_connected(False)
-            self.log_message(f"✗ Connection failed: {e}")
+            self.log_message(f"✗ {error_message}")
+
+        if not self.reconnecting and self.retry_attempts < self.max_retry_attempts:
+            # Start reconnection process
+            self.start_reconnection_process()
+
+        # Only log every few attempts to avoid spam
+        if self.consecutive_failures == 1 or self.consecutive_failures % 3 == 0:
+            self.log_message(f"✗ {error_message}")
+
+    def start_reconnection_process(self):
+        """Start the reconnection process"""
+        if self.retry_attempts >= self.max_retry_attempts:
+            msg = "❌ Max reconnection attempts exceeded. Manual reconnection required."
+            self.log_message(msg)
+            self.set_reconnecting(False)
+            return
+
+        self.set_reconnecting(True)
+        self.retry_attempts += 1
+
+        # Calculate exponential backoff delay (max 30 seconds)
+        delay = self.base_retry_delay * (2 ** (self.retry_attempts - 1))
+        self.current_retry_delay = min(delay, 30)
+
+        msg = (
+            f"🔄 Attempting reconnection {self.retry_attempts}/"
+            f"{self.max_retry_attempts} in {self.current_retry_delay}s..."
+        )
+        self.log_message(msg)
+
+        # Start reconnection timer
+        self.reconnect_timer.start(int(self.current_retry_delay * 1000))
+
+    def attempt_reconnection(self):
+        """Attempt to reconnect (called by timer)"""
+        self.log_message(f"🔄 Reconnection attempt {self.retry_attempts}...")
+        self.check_connection()
+
+        if not self.connected:
+            # This attempt failed, try again
+            QTimer.singleShot(1000, self.start_reconnection_process)
+
+    def manual_reconnect(self):
+        """Manual reconnection triggered by user"""
+        self.reset_retry_state()
+        self.log_message("🔄 Manual reconnection requested...")
+        self.check_connection()
+
+    def reset_retry_state(self):
+        """Reset the retry state after successful connection"""
+        self.retry_attempts = 0
+        self.current_retry_delay = self.base_retry_delay
+        self.consecutive_failures = 0
+        self.set_reconnecting(False)
+        if self.reconnect_timer.isActive():
+            self.reconnect_timer.stop()
+
+    def set_reconnecting(self, reconnecting: bool):
+        """Update reconnecting status"""
+        self.reconnecting = reconnecting
+        self.update_ui_state()
+
+    def update_ui_state(self):
+        """Update UI based on current connection state"""
+        import datetime
+
+        current_time = datetime.datetime.now().strftime("%H:%M:%S")
+
+        if self.connected:
+            self.status_label.setText("Server: Connected")
+            self.status_label.setStyleSheet(
+                "QLabel { color: green; font-weight: bold; }"
+            )
+            self.connect_btn.setText("Reconnect")
+            self.info_label.setText(f"Last check: {current_time}")
+        elif self.reconnecting:
+            self.status_label.setText("Server: Reconnecting...")
+            self.status_label.setStyleSheet(
+                "QLabel { color: orange; font-weight: bold; }"
+            )
+            self.connect_btn.setText("Retry Now")
+            if self.retry_attempts > 0:
+                retry_info = (
+                    f"Retry {self.retry_attempts}/"
+                    f"{self.max_retry_attempts} - "
+                    f"Next in {self.current_retry_delay}s"
+                )
+                self.info_label.setText(retry_info)
+        else:
+            self.status_label.setText("Server: Disconnected")
+            self.status_label.setStyleSheet("QLabel { color: red; font-weight: bold; }")
+            self.connect_btn.setText("Connect")
+            if self.retry_attempts >= self.max_retry_attempts:
+                msg = "Max retries exceeded - click Connect to retry"
+                self.info_label.setText(msg)
+            else:
+                self.info_label.setText(f"Connection lost at {current_time}")
 
     def set_connected(self, connected: bool):
         """Update connection status"""
         if self.connected != connected:
             self.connected = connected
-            if connected:
-                self.status_label.setText("Server: Connected")
-                self.status_label.setStyleSheet(
-                    "QLabel { color: green; font-weight: bold; }"
-                )
-                self.connect_btn.setText("Disconnect")
-            else:
-                self.status_label.setText("Server: Disconnected")
-                self.status_label.setStyleSheet(
-                    "QLabel { color: red; font-weight: bold; }"
-                )
-                self.connect_btn.setText("Connect")
-
+            self.update_ui_state()
             self.connection_status_changed.emit(connected)
 
     def log_message(self, message: str):
-        """Add message to log"""
+        """Add message to log with timestamp"""
+        import datetime
+
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         cursor = self.log_text.textCursor()
         cursor.movePosition(QTextCursor.End)
-        cursor.insertText(f"{message}\n")
+        cursor.insertText(f"[{timestamp}] {message}\n")
         self.log_text.setTextCursor(cursor)
 
         # Keep log size manageable

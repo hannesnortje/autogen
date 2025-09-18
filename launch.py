@@ -157,9 +157,10 @@ class AutoGenLauncher:
         self.logger.info("Starting AutoGen MCP server...")
 
         try:
+            # Use Poetry to run the server with proper environment
             cmd = [
-                sys.executable,
-                "-m",
+                "poetry",
+                "run",
                 "uvicorn",
                 "src.autogen_mcp.mcp_server:app",
                 "--host",
@@ -207,7 +208,8 @@ class AutoGenLauncher:
         self.logger.info("Starting AutoGen Desktop UI...")
 
         try:
-            cmd = [sys.executable, "src/autogen_ui/main.py"]
+            # Use Poetry to run the UI with proper environment
+            cmd = ["poetry", "run", "python", "src/autogen_ui/main.py"]
 
             self.logger.info(f"UI command: {' '.join(cmd)}")
 
