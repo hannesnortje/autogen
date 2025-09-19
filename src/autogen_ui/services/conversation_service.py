@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass, asdict
+from enum import Enum
 from PySide6.QtCore import QObject, Signal, QThread, QTimer
 
 from .session_service import SessionService
@@ -16,21 +17,114 @@ from .session_service import SessionService
 logger = logging.getLogger(__name__)
 
 
+class MessageType(Enum):
+    """Enumeration of different message types in conversations"""
+
+    USER = "user"  # User input messages
+    AGENT_RESPONSE = "agent_response"  # Direct agent responses to user
+    AGENT_TO_AGENT = "agent_to_agent"  # Agent talking to another agent
+    AGENT_THINKING = "agent_thinking"  # Agent reasoning/internal process
+    AGENT_COORDINATION = "agent_coordination"  # Agents coordinating tasks
+    SYSTEM = "system"  # System status messages
+
+
 @dataclass
 class ConversationMessage:
-    """Data class for conversation messages"""
+    """Enhanced data class for conversation messages with agent targeting"""
 
     id: str
     session_id: str
-    role: str  # 'user', 'assistant', 'system'
+    role: str  # 'user', 'assistant', 'system' (for backward compatibility)
     content: str
     timestamp: str
+    message_type: str = MessageType.USER.value  # Type of message
     agent_name: Optional[str] = None
+    target_agents: Optional[List[str]] = None  # Targeted agents
+    source_agent: Optional[str] = None  # Source agent (for agent-to-agent)
+    reasoning_context: Optional[str] = None  # Agent reasoning details
     metadata: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
         return asdict(self)
+
+    @classmethod
+    def create_user_message(
+        cls, session_id: str, content: str, target_agents: Optional[List[str]] = None
+    ) -> "ConversationMessage":
+        """Factory method for creating user messages"""
+        return cls(
+            id=f"user_{datetime.now().timestamp()}",
+            session_id=session_id,
+            role="user",
+            content=content,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.USER.value,
+            target_agents=target_agents,
+        )
+
+    @classmethod
+    def create_agent_response(
+        cls, session_id: str, agent_name: str, content: str
+    ) -> "ConversationMessage":
+        """Factory method for creating agent response messages"""
+        return cls(
+            id=f"agent_{agent_name}_{datetime.now().timestamp()}",
+            session_id=session_id,
+            role="assistant",
+            content=content,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.AGENT_RESPONSE.value,
+            agent_name=agent_name,
+        )
+
+    @classmethod
+    def create_agent_to_agent_message(
+        cls, session_id: str, source_agent: str, target_agent: str, content: str
+    ) -> "ConversationMessage":
+        """Factory method for creating agent-to-agent messages"""
+        timestamp = datetime.now().timestamp()
+        return cls(
+            id=f"a2a_{source_agent}_{target_agent}_{timestamp}",
+            session_id=session_id,
+            role="assistant",
+            content=content,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.AGENT_TO_AGENT.value,
+            source_agent=source_agent,
+            target_agents=[target_agent],
+        )
+
+    @classmethod
+    def create_agent_thinking_message(
+        cls, session_id: str, agent_name: str, reasoning: str
+    ) -> "ConversationMessage":
+        """Factory method for creating agent thinking/reasoning messages"""
+        timestamp = datetime.now().timestamp()
+        return cls(
+            id=f"thinking_{agent_name}_{timestamp}",
+            session_id=session_id,
+            role="assistant",
+            content=reasoning,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.AGENT_THINKING.value,
+            agent_name=agent_name,
+            reasoning_context=reasoning,
+        )
+
+    @classmethod
+    def create_system_message(
+        cls, session_id: str, content: str
+    ) -> "ConversationMessage":
+        """Factory method for creating system messages"""
+        return cls(
+            id=f"system_{datetime.now().timestamp()}",
+            session_id=session_id,
+            role="system",
+            content=content,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.SYSTEM.value,
+        )
 
 
 class ConversationWorker(QThread):
@@ -157,11 +251,15 @@ class ConversationService(QObject):
         self.conversations[session_id] = []
 
         # Add welcome message
+        session_name = session_config.get("name", "Unknown")
+        agents_list = ", ".join(session_config.get("agents", []))
+        content = f"Session '{session_name}' started with agents: {agents_list}"
+
         welcome_message = ConversationMessage(
             id=f"welcome_{session_id}",
             session_id=session_id,
             role="system",
-            content=f"Session '{session_config.get('name', 'Unknown')}' started with agents: {', '.join(session_config.get('agents', []))}",
+            content=content,
             timestamp=datetime.now().strftime("%H:%M:%S"),
         )
 
@@ -199,6 +297,98 @@ class ConversationService(QObject):
 
         return message_id
 
+    def send_targeted_message(
+        self, session_id: str, message: str, target_agents: List[str]
+    ) -> str:
+        """Send a user message to specific agents in the conversation"""
+        if session_id not in self.active_sessions:
+            raise ValueError(f"No active session {session_id}")
+
+        # Validate target agents exist in session
+        session_config = self.active_sessions[session_id]
+        available_agents = session_config.get("agents", [])
+        invalid_agents = [
+            agent for agent in target_agents if agent not in available_agents
+        ]
+        if invalid_agents:
+            raise ValueError(f"Invalid agents: {', '.join(invalid_agents)}")
+
+        # Create targeted user message
+        user_message = ConversationMessage.create_user_message(
+            session_id=session_id, content=message, target_agents=target_agents
+        )
+
+        # Add to conversation immediately
+        self.add_message_to_conversation(user_message)
+        self.message_added.emit(user_message)
+
+        # Queue for processing by specific agents
+        self.worker.queue_message(session_id, message, target_agents)
+
+        self.message_sent.emit(session_id, user_message.id)
+        agent_list = ", ".join(target_agents)
+        logger.info(
+            f"Sent targeted message to {agent_list} in session {session_id}: "
+            f"{message[:50]}..."
+        )
+
+        return user_message.id
+
+    def add_agent_to_agent_message(
+        self, session_id: str, source_agent: str, target_agent: str, content: str
+    ):
+        """Add an agent-to-agent communication message"""
+        message = ConversationMessage.create_agent_to_agent_message(
+            session_id=session_id,
+            source_agent=source_agent,
+            target_agent=target_agent,
+            content=content,
+        )
+
+        self.add_message_to_conversation(message)
+        self.message_added.emit(message)
+
+        logger.info(f"Agent-to-agent message: {source_agent} -> {target_agent}")
+
+    def add_agent_thinking_message(
+        self, session_id: str, agent_name: str, reasoning: str
+    ):
+        """Add an agent thinking/reasoning message"""
+        message = ConversationMessage.create_agent_thinking_message(
+            session_id=session_id, agent_name=agent_name, reasoning=reasoning
+        )
+
+        self.add_message_to_conversation(message)
+        self.message_added.emit(message)
+
+        logger.info(f"Agent thinking: {agent_name}")
+
+    def add_agent_coordination_message(
+        self, session_id: str, content: str, involved_agents: List[str]
+    ):
+        """Add an agent coordination message"""
+        message = ConversationMessage(
+            id=f"coord_{datetime.now().timestamp()}",
+            session_id=session_id,
+            role="system",
+            content=content,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.AGENT_COORDINATION.value,
+            target_agents=involved_agents,
+        )
+
+        self.add_message_to_conversation(message)
+        self.message_added.emit(message)
+
+        logger.info("Agent coordination message added")
+
+    def get_conversation_by_message_types(
+        self, session_id: str, message_types: List[str]
+    ) -> List[ConversationMessage]:
+        """Get conversation history filtered by message types"""
+        conversation = self.get_conversation(session_id)
+        return [msg for msg in conversation if msg.message_type in message_types]
+
     def add_message_to_conversation(self, message: ConversationMessage):
         """Add a message to the conversation history"""
         if message.session_id not in self.conversations:
@@ -221,11 +411,14 @@ class ConversationService(QObject):
         """End conversation for a session"""
         if session_id in self.active_sessions:
             # Add goodbye message
+            session_name = self.active_sessions[session_id].get("name", "Unknown")
+            content = f"Session '{session_name}' ended."
+
             goodbye_message = ConversationMessage(
                 id=f"goodbye_{session_id}",
                 session_id=session_id,
                 role="system",
-                content=f"Session '{self.active_sessions[session_id].get('name', 'Unknown')}' ended.",
+                content=content,
                 timestamp=datetime.now().strftime("%H:%M:%S"),
             )
 
@@ -278,7 +471,8 @@ class ConversationService(QObject):
         """Export conversation to Markdown format"""
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("# Conversation Export\n\n")
-            f.write(f"**Exported:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"**Exported:** {timestamp}\n")
             f.write(f"**Messages:** {len(conversation)}\n\n")
             f.write("---\n\n")
 
