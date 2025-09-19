@@ -1673,6 +1673,309 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 # --- Server Startup ---
 
 
+# Enhanced Conversation System Endpoints
+# These endpoints support the enhanced conversation features with agent targeting
+
+
+class ConversationMessage(BaseModel):
+    """Enhanced conversation message model"""
+
+    id: str
+    session_id: str
+    role: str
+    content: str
+    timestamp: str
+    message_type: str = "user"
+    agent_name: Optional[str] = None
+    target_agents: Optional[List[str]] = None
+    source_agent: Optional[str] = None
+    reasoning_context: Optional[str] = None
+    metadata: Optional[dict] = None
+
+
+class SendMessageRequest(BaseModel):
+    session_id: str
+    content: str
+    target_agents: Optional[List[str]] = None  # If None, sends to all agents
+    message_type: Optional[str] = "user"
+
+
+class AgentInteractionRequest(BaseModel):
+    session_id: str
+    source_agent: str
+    target_agent: str
+    content: str
+    interaction_type: str = "agent_to_agent"
+
+
+class ConversationHistoryResponse(BaseModel):
+    session_id: str
+    messages: List[ConversationMessage]
+    total_messages: int
+
+
+# Global conversation storage (in production, use Redis or database)
+conversation_store: dict[str, List[ConversationMessage]] = {}
+
+
+@app.post("/conversation/send")
+async def send_conversation_message(request: SendMessageRequest):
+    """Send a message in a conversation with optional agent targeting"""
+    try:
+        session_id = request.session_id
+
+        # Create message
+        message = ConversationMessage(
+            id=f"msg_{uuid.uuid4().hex[:8]}",
+            session_id=session_id,
+            role="user",
+            content=request.content,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            message_type=request.message_type,
+            target_agents=request.target_agents,
+        )
+
+        # Store message
+        if session_id not in conversation_store:
+            conversation_store[session_id] = []
+        conversation_store[session_id].append(message)
+
+        # Broadcast to WebSocket clients
+        if request.target_agents:
+            # Targeted message
+            await manager.broadcast_session_update(
+                session_id,
+                {
+                    "type": "targeted_message",
+                    "message": message.dict(),
+                    "targets": request.target_agents,
+                },
+            )
+        else:
+            # Broadcast to all agents
+            await manager.broadcast_session_update(
+                session_id, {"type": "message", "message": message.dict()}
+            )
+
+        logger.info(
+            f"Message sent in session {session_id}",
+            extra={
+                "extra": {
+                    "message_id": message.id,
+                    "targeted": bool(request.target_agents),
+                }
+            },
+        )
+
+        return {
+            "status": "sent",
+            "message_id": message.id,
+            "session_id": session_id,
+            "targeted": bool(request.target_agents),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to send conversation message: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send message: {str(e)}")
+
+
+@app.post("/conversation/agent-interaction")
+async def add_agent_interaction(request: AgentInteractionRequest):
+    """Add an agent-to-agent interaction message"""
+    try:
+        session_id = request.session_id
+
+        # Create agent interaction message
+        message = ConversationMessage(
+            id=f"agent_{uuid.uuid4().hex[:8]}",
+            session_id=session_id,
+            role="assistant",
+            content=request.content,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            message_type=request.interaction_type,
+            source_agent=request.source_agent,
+            target_agents=[request.target_agent],
+        )
+
+        # Store message
+        if session_id not in conversation_store:
+            conversation_store[session_id] = []
+        conversation_store[session_id].append(message)
+
+        # Broadcast agent interaction
+        await manager.broadcast_session_update(
+            session_id,
+            {
+                "type": "agent_interaction",
+                "message": message.dict(),
+                "source": request.source_agent,
+                "target": request.target_agent,
+            },
+        )
+
+        logger.info(
+            f"Agent interaction: {request.source_agent} -> {request.target_agent}",
+            extra={"extra": {"session_id": session_id, "message_id": message.id}},
+        )
+
+        return {
+            "status": "recorded",
+            "message_id": message.id,
+            "interaction": f"{request.source_agent} -> {request.target_agent}",
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to record agent interaction: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to record interaction: {str(e)}"
+        )
+
+
+@app.get(
+    "/conversation/{session_id}/history", response_model=ConversationHistoryResponse
+)
+async def get_conversation_history(session_id: str, limit: Optional[int] = None):
+    """Get conversation history for a session"""
+    try:
+        messages = conversation_store.get(session_id, [])
+
+        # Apply limit if specified
+        if limit and limit > 0:
+            messages = messages[-limit:]
+
+        return ConversationHistoryResponse(
+            session_id=session_id,
+            messages=messages,
+            total_messages=len(conversation_store.get(session_id, [])),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get conversation history: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
+
+
+@app.delete("/conversation/{session_id}")
+async def clear_conversation(session_id: str):
+    """Clear conversation history for a session"""
+    try:
+        if session_id in conversation_store:
+            message_count = len(conversation_store[session_id])
+            conversation_store[session_id] = []
+
+            # Notify clients
+            await manager.broadcast_session_update(
+                session_id,
+                {"type": "conversation_cleared", "cleared_messages": message_count},
+            )
+
+            logger.info(f"Cleared {message_count} messages from session {session_id}")
+            return {
+                "status": "cleared",
+                "session_id": session_id,
+                "cleared_messages": message_count,
+            }
+        else:
+            return {"status": "not_found", "session_id": session_id}
+
+    except Exception as e:
+        logger.error(f"Failed to clear conversation: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to clear conversation: {str(e)}"
+        )
+
+
+@app.post("/conversation/{session_id}/typing/start")
+async def start_agent_typing(session_id: str, agent_name: str):
+    """Indicate that an agent started typing/thinking"""
+    try:
+        await manager.broadcast_session_update(
+            session_id,
+            {
+                "type": "agent_typing_started",
+                "agent": agent_name,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+        return {
+            "status": "typing_started",
+            "agent": agent_name,
+            "session_id": session_id,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to start agent typing indicator: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start typing: {str(e)}")
+
+
+@app.post("/conversation/{session_id}/typing/stop")
+async def stop_agent_typing(session_id: str, agent_name: str):
+    """Indicate that an agent stopped typing/thinking"""
+    try:
+        await manager.broadcast_session_update(
+            session_id,
+            {
+                "type": "agent_typing_stopped",
+                "agent": agent_name,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+        return {
+            "status": "typing_stopped",
+            "agent": agent_name,
+            "session_id": session_id,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to stop agent typing indicator: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop typing: {str(e)}")
+
+
+@app.get("/conversation/{session_id}/agents")
+async def get_session_agents(session_id: str):
+    """Get list of available agents for a session"""
+    try:
+        # Get from active sessions or default list
+        session_info = active_sessions.get(session_id, {})
+        agents = session_info.get(
+            "agents", ["Assistant", "Planner", "Reviewer", "Executor"]
+        )
+
+        return {"session_id": session_id, "agents": agents, "count": len(agents)}
+
+    except Exception as e:
+        logger.error(f"Failed to get session agents: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get agents: {str(e)}")
+
+
+@app.get("/conversation/stats")
+async def get_conversation_stats():
+    """Get conversation system statistics"""
+    try:
+        total_sessions = len(conversation_store)
+        total_messages = sum(len(messages) for messages in conversation_store.values())
+
+        # Calculate message type distribution
+        message_types = {}
+        for messages in conversation_store.values():
+            for msg in messages:
+                msg_type = msg.message_type
+                message_types[msg_type] = message_types.get(msg_type, 0) + 1
+
+        return {
+            "total_sessions": total_sessions,
+            "total_messages": total_messages,
+            "message_types": message_types,
+            "active_websockets": len(manager.active_connections),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get conversation stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
 async def startup_event():
     """Initialize memory system on server startup."""
     try:

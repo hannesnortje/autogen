@@ -13,6 +13,7 @@ from enum import Enum
 from PySide6.QtCore import QObject, Signal, QThread, QTimer
 
 from .session_service import SessionService
+from .mcp_conversation_client import MCPConversationClient
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,21 @@ class ConversationMessage:
             message_type=MessageType.AGENT_THINKING.value,
             agent_name=agent_name,
             reasoning_context=reasoning,
+        )
+
+    @classmethod
+    def create_agent_coordination_message(
+        cls, session_id: str, content: str
+    ) -> "ConversationMessage":
+        """Factory method for creating agent coordination messages"""
+        timestamp = datetime.now().timestamp()
+        return cls(
+            id=f"coord_{timestamp}",
+            session_id=session_id,
+            role="assistant",
+            content=content,
+            timestamp=datetime.now().strftime("%H:%M:%S"),
+            message_type=MessageType.AGENT_COORDINATION.value,
         )
 
     @classmethod
@@ -226,6 +242,9 @@ class ConversationService(QObject):
         self.session_service = session_service
         self.conversations: Dict[str, List[ConversationMessage]] = {}
         self.active_sessions: Dict[str, Dict[str, Any]] = {}
+
+        # Initialize MCP client for backend integration
+        self.mcp_client = MCPConversationClient()
 
         # Initialize worker thread
         self.worker = ConversationWorker(session_service)
@@ -348,7 +367,67 @@ class ConversationService(QObject):
         self.add_message_to_conversation(message)
         self.message_added.emit(message)
 
-        logger.info(f"Agent-to-agent message: {source_agent} -> {target_agent}")
+    # Factory methods for creating messages
+    def create_user_message(
+        self, session_id: str, content: str, target_agents: Optional[List[str]] = None
+    ) -> ConversationMessage:
+        """Create a user message"""
+        return ConversationMessage.create_user_message(
+            session_id, content, target_agents
+        )
+
+    def create_targeted_user_message(
+        self, session_id: str, content: str, target_agents: List[str]
+    ) -> ConversationMessage:
+        """Create a targeted user message"""
+        return ConversationMessage.create_user_message(
+            session_id, content, target_agents
+        )
+
+    def create_agent_response(
+        self, session_id: str, content: str, agent_name: str
+    ) -> ConversationMessage:
+        """Create an agent response message"""
+        return ConversationMessage.create_agent_response(
+            session_id, agent_name, content
+        )
+
+    def create_agent_thinking(
+        self,
+        session_id: str,
+        content: str,
+        agent_name: str,
+        reasoning_context: Optional[str] = None,
+    ) -> ConversationMessage:
+        """Create an agent thinking message"""
+        message = ConversationMessage.create_agent_thinking_message(
+            session_id, agent_name, content
+        )
+        if reasoning_context:
+            message.reasoning_context = reasoning_context
+        return message
+
+    def create_agent_coordination(
+        self,
+        session_id: str,
+        content: str,
+        participating_agents: Optional[List[str]] = None,
+    ) -> ConversationMessage:
+        """Create an agent coordination message"""
+        message = ConversationMessage.create_agent_coordination_message(
+            session_id, content
+        )
+        if participating_agents:
+            message.metadata = {"participating_agents": participating_agents}
+        return message
+
+    def get_conversation_history(self, session_id: str) -> List[ConversationMessage]:
+        """Get conversation history for a session"""
+        return self.get_conversation(session_id)
+
+    def add_message(self, message: ConversationMessage):
+        """Add a message to the conversation"""
+        self.add_message_to_conversation(message)
 
     def add_agent_thinking_message(
         self, session_id: str, agent_name: str, reasoning: str
@@ -498,4 +577,111 @@ class ConversationService(QObject):
         if hasattr(self, "worker") and self.worker.isRunning():
             self.worker.stop_worker()
             self.worker.wait(3000)  # Wait up to 3 seconds for thread to finish
+
+        # Clean up MCP client
+        try:
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(self.mcp_client.close())
+        except Exception as e:
+            logger.warning(f"Failed to close MCP client: {e}")
+
         logger.info("ConversationService cleaned up")
+
+    # MCP Integration Methods
+
+    def send_message_via_mcp(
+        self,
+        session_id: str,
+        content: str,
+        target_agents: Optional[List[str]] = None,
+        message_type: str = "user",
+    ) -> bool:
+        """Send message via MCP server"""
+        try:
+            result = self.mcp_client.send_message_sync(
+                session_id, content, target_agents, message_type
+            )
+            logger.info(f"Message sent via MCP: {result}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send message via MCP: {e}")
+            self.error_occurred.emit(session_id, f"MCP communication failed: {str(e)}")
+            return False
+
+    def load_conversation_from_mcp(self, session_id: str) -> bool:
+        """Load conversation history from MCP server"""
+        try:
+            messages = self.mcp_client.get_conversation_history_sync(session_id)
+
+            # Clear current conversation
+            self.conversations[session_id] = []
+
+            # Convert MCP messages to ConversationMessage objects
+            for msg_data in messages:
+                timestamp_default = datetime.now().strftime("%H:%M:%S")
+                message = ConversationMessage(
+                    id=msg_data.get("id", f"mcp_{datetime.now().timestamp()}"),
+                    session_id=session_id,
+                    role=msg_data.get("role", "user"),
+                    content=msg_data.get("content", ""),
+                    timestamp=msg_data.get("timestamp", timestamp_default),
+                    message_type=msg_data.get("message_type", "user"),
+                    agent_name=msg_data.get("agent_name"),
+                    target_agents=msg_data.get("target_agents"),
+                    source_agent=msg_data.get("source_agent"),
+                    reasoning_context=msg_data.get("reasoning_context"),
+                    metadata=msg_data.get("metadata"),
+                )
+                self.conversations[session_id].append(message)
+                self.message_added.emit(message)
+
+            logger.info(
+                f"Loaded {len(messages)} messages from MCP for session {session_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to load conversation from MCP: {e}")
+            self.error_occurred.emit(
+                session_id, f"Failed to load conversation: {str(e)}"
+            )
+            return False
+
+    def get_available_agents_from_mcp(self, session_id: str) -> List[str]:
+        """Get available agents for session from MCP server"""
+        try:
+            agents = self.mcp_client.get_session_agents_sync(session_id)
+            logger.info(f"Available agents for {session_id}: {agents}")
+            return agents
+        except Exception as e:
+            logger.error(f"Failed to get agents from MCP: {e}")
+            return []
+
+    def sync_with_mcp_server(self, session_id: str):
+        """Synchronize conversation state with MCP server"""
+        try:
+            # Send any unsent messages to MCP
+            if session_id in self.conversations:
+                for message in self.conversations[session_id]:
+                    # Check if message needs to be synced
+                    if not message.metadata or not message.metadata.get(
+                        "synced_to_mcp"
+                    ):
+                        self.send_message_via_mcp(
+                            session_id,
+                            message.content,
+                            message.target_agents,
+                            message.message_type,
+                        )
+                        # Mark as synced
+                        if not message.metadata:
+                            message.metadata = {}
+                        message.metadata["synced_to_mcp"] = True
+
+            # Load latest from MCP
+            self.load_conversation_from_mcp(session_id)
+
+        except Exception as e:
+            logger.error(f"Failed to sync with MCP server: {e}")
+            self.error_occurred.emit(session_id, f"Sync failed: {str(e)}")

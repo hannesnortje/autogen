@@ -32,11 +32,14 @@ logger = logging.getLogger(__name__)
 class EnhancedConversationWidget(QWidget):
     """Enhanced conversation widget with agent targeting and message type support"""
 
-    def __init__(self, conversation_service: ConversationService):
+    def __init__(
+        self, conversation_service: ConversationService, use_mcp: bool = False
+    ):
         super().__init__()
         self.conversation_service = conversation_service
         self.current_session_id: Optional[str] = None
         self.agent_checkboxes: Dict[str, QCheckBox] = {}
+        self.use_mcp_integration = use_mcp  # MCP integration flag
 
         # Connect to conversation service signals
         self.conversation_service.message_added.connect(self.on_message_added)
@@ -285,7 +288,12 @@ class EnhancedConversationWidget(QWidget):
             target_info = f" → {targets}"
 
         # Create enhanced formatted message
-        timestamp = message.timestamp.strftime("%H:%M:%S")
+        timestamp = message.timestamp
+        # Handle both string and datetime timestamp formats
+        if hasattr(message.timestamp, "strftime"):
+            timestamp = message.timestamp.strftime("%H:%M:%S")
+        else:
+            timestamp = str(message.timestamp)  # Already a string
         formatted_message = f"""
 <div style="margin: 10px 0; padding: 12px; border-left: 4px {border_style} {color}; background-color: {color}10; border-radius: 6px;">
     <div style="display: flex; align-items: center; margin-bottom: 8px;">
@@ -325,27 +333,60 @@ class EnhancedConversationWidget(QWidget):
                     content=message_text,
                     target_agents=selected_agents,
                 )
-                self.conversation_service.send_targeted_message(
-                    self.current_session_id, message_text, selected_agents
-                )
+
+                # Use MCP integration if enabled
+                if self.use_mcp_integration:
+                    success = self.conversation_service.send_message_via_mcp(
+                        self.current_session_id, message_text, selected_agents, "user"
+                    )
+                    if not success:
+                        msg = "MCP send failed, using local"
+                        self.status_label.setText(msg)
+                        # Fall back to local sending
+                        self.conversation_service.send_targeted_message(
+                            self.current_session_id, message_text, selected_agents
+                        )
+                else:
+                    self.conversation_service.send_targeted_message(
+                        self.current_session_id, message_text, selected_agents
+                    )
             else:
                 # Send to session (all agents)
                 message = self.conversation_service.create_user_message(
                     session_id=self.current_session_id, content=message_text
                 )
-                self.conversation_service.send_message(
-                    self.current_session_id, message_text
-                )
+
+                # Use MCP integration if enabled
+                if self.use_mcp_integration:
+                    success = self.conversation_service.send_message_via_mcp(
+                        self.current_session_id, message_text, None, "user"
+                    )
+                    if not success:
+                        msg = "MCP send failed, using local"
+                        self.status_label.setText(msg)
+                        # Fall back to local sending
+                        self.conversation_service.send_message(
+                            self.current_session_id, message_text
+                        )
+                else:
+                    self.conversation_service.send_message(
+                        self.current_session_id, message_text
+                    )
 
             # Display the message immediately
             self.display_message(message)
 
             # Clear input
             self.message_input.clear()
-            self.status_label.setText("Sending message...")
+            if self.use_mcp_integration:
+                status_msg = "Message sent via MCP"
+            else:
+                status_msg = "Sending message..."
+            self.status_label.setText(status_msg)
 
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
+            self.status_label.setText(f"Error: {str(e)}")
 
     def clear_conversation(self):
         """Clear the conversation"""
