@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "autogen-mcp"
+version = "0.1.0"
+description = "AutoGen multi-agent workflow with Qdrant memory and VS Code MCP integration."
+authors = ["hannesnortje <your@email.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+requests = "^2.32.3"
+fastembed = "^0.3.5"
+scikit-learn = "^1.5.0"
+fastapi = "^0.116.1"
+uvicorn = {extras = ["standard"], version = "^0.35.0"}
+# UI-specific dependencies for PySide6 desktop application
+PySide6 = "^6.7.0"              # Qt6 Python bindings for desktop UI
+websockets = "^12.0"            # WebSocket client for real-time MCP server updates
+python-multipart = "^0.0.20"
+# Data export/import dependencies
+pandas = "^2.1.0"               # Data manipulation and export to CSV/Excel
+openpyxl = "^3.1.0"             # Excel file format support for pandas
+aiohttp = "^3.12.15"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-timeout = "^2.3.1"
+black = "^24.0.0"
+ruff = "^0.4.0"
+mypy = "^1.8.0"
+pre-commit = "^3.6.0"
+types-requests = "^2.32.0.20240914"
+python-dotenv = "^1.1.1"
+uvicorn = "^0.35.0"
+httpx = "^0.28.1"
+pytest-asyncio = "^1.2.0"
+# UI testing dependencies
+pytest-qt = "^4.2.0"           # Qt widget testing framework
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
