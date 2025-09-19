@@ -4,6 +4,7 @@ Manage AutoGen conversation sessions and history
 """
 
 import os
+import json
 import logging
 from datetime import datetime
 from typing import Dict, Any
@@ -171,6 +172,12 @@ class SessionConfigWidget(QWidget):
 
     def __init__(self):
         super().__init__()
+
+        # Initialize storage paths
+        self.sessions_dir = os.path.expanduser("~/.autogen/sessions")
+        os.makedirs(self.sessions_dir, exist_ok=True)
+        self.saved_configs_file = os.path.join(self.sessions_dir, "saved_configs.json")
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -431,11 +438,47 @@ class SessionConfigWidget(QWidget):
         self.session_start_requested.emit(config)
 
     def save_config(self):
-        """Save session configuration"""
-        config = self.get_session_config()
-        QMessageBox.information(
-            self, "Config Saved", f"Session configuration '{config['name']}' saved"
-        )
+        """Save session configuration to JSON file"""
+        try:
+            config = self.get_session_config()
+
+            # Load existing configurations
+            saved_configs = []
+            if os.path.exists(self.saved_configs_file):
+                try:
+                    with open(self.saved_configs_file, "r") as f:
+                        saved_configs = json.load(f)
+                except (json.JSONDecodeError, FileNotFoundError):
+                    saved_configs = []
+
+            # Add timestamp and unique ID
+            config["saved_at"] = datetime.now().isoformat()
+            config["config_id"] = f"{config['name']}_{int(datetime.now().timestamp())}"
+
+            # Remove any existing config with the same name
+            saved_configs = [
+                c for c in saved_configs if c.get("name") != config["name"]
+            ]
+
+            # Add the new config
+            saved_configs.append(config)
+
+            # Save to file
+            with open(self.saved_configs_file, "w") as f:
+                json.dump(saved_configs, f, indent=2)
+
+            QMessageBox.information(
+                self,
+                "Config Saved",
+                f"Session configuration '{config['name']}' saved successfully!\n"
+                f"Saved to: {self.saved_configs_file}",
+            )
+            logger.info(f"Session configuration saved: {config['name']}")
+
+        except Exception as e:
+            error_msg = f"Failed to save configuration: {str(e)}"
+            logger.error(error_msg)
+            QMessageBox.critical(self, "Save Failed", error_msg)
 
     def reset_config(self):
         """Reset configuration"""
@@ -468,6 +511,7 @@ class SessionConfigWidget(QWidget):
 
         config = {
             "name": self.session_name.text().strip(),
+            "session_id": self.session_name.text().strip(),  # Add session_id for conversation widget
             "project": self.project_name.text().strip(),
             "objective": self.objective.toPlainText().strip(),
             "type": self.session_type.currentText(),
@@ -496,6 +540,14 @@ class SessionManagerWidget(QWidget):
     def __init__(self, server_url: str):
         super().__init__()
         self.server_url = server_url
+        # Initialize storage path
+        self.sessions_dir = os.path.expanduser("~/.autogen/sessions")
+        os.makedirs(self.sessions_dir, exist_ok=True)
+        self.saved_configs_file = os.path.join(self.sessions_dir, "saved_configs.json")
+        self.session_history_file = os.path.join(
+            self.sessions_dir, "session_history.json"
+        )
+
         self.current_session = None
         self.sessions_history = []
 
@@ -629,48 +681,171 @@ class SessionManagerWidget(QWidget):
         self.timer.start(5000)  # Update every 5 seconds
 
     def load_sessions(self):
-        """Load session history"""
-        # Placeholder - load from storage
+        """Load session history from saved configurations and session history"""
         self.history_tree.clear()
 
-        # Add some sample sessions
-        sample_sessions = [
-            {
-                "name": "Code Review Session",
-                "type": "Code Review",
-                "agents": ["Code-Assistant", "Reviewer"],
-                "started": "2025-09-17 09:00",
-                "status": "Completed",
-            },
-            {
-                "name": "Planning Meeting",
-                "type": "Planning",
-                "agents": ["Planner", "Analyst"],
-                "started": "2025-09-17 08:30",
-                "status": "Completed",
-            },
-        ]
+        all_sessions = []
 
-        for session in sample_sessions:
+        # Load saved configurations
+        if os.path.exists(self.saved_configs_file):
+            try:
+                with open(self.saved_configs_file, "r") as f:
+                    saved_configs = json.load(f)
+                    for config in saved_configs:
+                        all_sessions.append(
+                            {
+                                "name": config.get("name", "Unknown"),
+                                "type": config.get("type", "Unknown"),
+                                "agents": config.get("agents", []),
+                                "started": config.get("saved_at", "Unknown")[
+                                    :16
+                                ].replace("T", " "),
+                                "status": "Saved Config",
+                                "data": config,
+                            }
+                        )
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                logger.warning(f"Failed to load saved configs: {e}")
+
+        # Load session history
+        if os.path.exists(self.session_history_file):
+            try:
+                with open(self.session_history_file, "r") as f:
+                    session_history = json.load(f)
+                    for session in session_history:
+                        all_sessions.append(
+                            {
+                                "name": session.get("name", "Unknown"),
+                                "type": session.get("type", "Unknown"),
+                                "agents": session.get("agents", []),
+                                "started": session.get("started_at", "Unknown")[
+                                    :16
+                                ].replace("T", " "),
+                                "status": session.get("status", "Completed"),
+                                "data": session,
+                            }
+                        )
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                logger.warning(f"Failed to load session history: {e}")
+
+        # Sort by date (newest first)
+        all_sessions.sort(key=lambda x: x.get("started", ""), reverse=True)
+
+        # Add sessions to tree
+        for session in all_sessions:
+            agents_str = ", ".join(session["agents"]) if session["agents"] else "None"
             item = QTreeWidgetItem(
                 [
                     session["name"],
                     session["type"],
-                    ", ".join(session["agents"]),
+                    agents_str,
                     session["started"],
                     session["status"],
                 ]
             )
-            item.setData(0, Qt.UserRole, session)
+            item.setData(0, Qt.UserRole, session["data"])
             self.history_tree.addTopLevelItem(item)
 
+        logger.info(f"Loaded {len(all_sessions)} sessions from storage")
+
+    def save_session_to_history(self, config):
+        """Save a started session to session history"""
+        try:
+            # Load existing history
+            session_history = []
+            if os.path.exists(self.session_history_file):
+                try:
+                    with open(self.session_history_file, "r") as f:
+                        session_history = json.load(f)
+                except (json.JSONDecodeError, FileNotFoundError):
+                    session_history = []
+
+            # Create history entry
+            history_entry = {
+                "name": config.get("name", "Unknown"),
+                "type": config.get("type", "Unknown"),
+                "agents": config.get("agents", []),
+                "directory": config.get("directory", ""),
+                "objective": config.get("objective", ""),
+                "started_at": datetime.now().isoformat(),
+                "status": "Running",
+                "session_id": config.get(
+                    "session_id", f"{config['name']}_{int(datetime.now().timestamp())}"
+                ),
+            }
+
+            # Add to history
+            session_history.insert(
+                0, history_entry
+            )  # Insert at beginning (newest first)
+
+            # Keep only last 100 sessions
+            session_history = session_history[:100]
+
+            # Save to file
+            with open(self.session_history_file, "w") as f:
+                json.dump(session_history, f, indent=2)
+
+            # Refresh the history display
+            self.load_sessions()
+
+            logger.info(f"Session saved to history: {config['name']}")
+
+        except Exception as e:
+            logger.error(f"Failed to save session to history: {e}")
+
     def load_session(self, item):
-        """Load a session from history"""
+        """Load a session from history and restore its configuration"""
         session_data = item.data(0, Qt.UserRole)
         if session_data:
-            QMessageBox.information(
-                self, "Load Session", f"Loading session: {session_data['name']}"
-            )
+            try:
+                # Restore the configuration to the form
+                self.session_name.setText(session_data.get("name", ""))
+                if "project" in session_data:
+                    self.project_name.setText(session_data.get("project", ""))
+                elif "project_name" in session_data:
+                    self.project_name.setText(session_data.get("project_name", ""))
+                else:
+                    self.project_name.setText(session_data.get("name", ""))
+
+                self.objective.setPlainText(session_data.get("objective", ""))
+
+                # Set session type
+                session_type = session_data.get("type", "Research")
+                type_index = self.session_type.findText(session_type)
+                if type_index >= 0:
+                    self.session_type.setCurrentIndex(type_index)
+
+                # Set working directory
+                if "directory" in session_data:
+                    self.working_directory.setText(session_data.get("directory", ""))
+
+                # Set agents
+                self.agents_list.clear()
+                agents = session_data.get("agents", [])
+                for agent_name in agents:
+                    item = QListWidgetItem(agent_name)
+                    item.setData(Qt.UserRole, {"name": agent_name})
+                    self.agents_list.addItem(item)
+
+                # Set max rounds if available
+                if "max_rounds" in session_data:
+                    self.max_rounds.setValue(session_data.get("max_rounds", 10))
+
+                # Switch to new session tab
+                self.tab_widget.setCurrentIndex(1)
+
+                QMessageBox.information(
+                    self,
+                    "Session Loaded",
+                    f"Session configuration '{session_data['name']}' loaded!\n"
+                    f"You can now modify and start the session.",
+                )
+
+            except Exception as e:
+                error_msg = f"Failed to load session: {str(e)}"
+                logger.error(error_msg)
+                QMessageBox.critical(self, "Load Failed", error_msg)
 
     def update_current_session(self):
         """Update current session display"""
@@ -703,6 +878,9 @@ class SessionManagerWidget(QWidget):
             "system",
             f"Session '{config['name']}' started with agents: {', '.join(config['agents'])}",
         )
+
+        # Save session to history
+        self.save_session_to_history(config)
 
         self.session_started.emit(config)
 

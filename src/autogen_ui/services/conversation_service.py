@@ -187,6 +187,60 @@ class ConversationWorker(QThread):
 
             await asyncio.sleep(0.1)  # Small delay to prevent busy waiting
 
+    async def _send_message_to_session(self, message_data: dict):
+        """Send message to session service (async implementation)"""
+        try:
+            session_id = message_data.get("session_id", "")
+            message = message_data.get("message", "")
+
+            # Simulate agent processing time
+            await asyncio.sleep(0.5)
+
+            # Create multiple agent responses based on the team roles
+            agent_responses = [
+                {
+                    "agent": "ScrumMaster",
+                    "response": f"Thank you for the input! I'll facilitate our discussion on: '{message[:100]}...' Let's ensure all team members can contribute.",
+                    "delay": 1.0,
+                },
+                {
+                    "agent": "ProductOwner",
+                    "response": "From a product perspective, I need to prioritize the features you mentioned. Here's my initial assessment of the requirements.",
+                    "delay": 2.0,
+                },
+                {
+                    "agent": "TechLead",
+                    "response": "Let me provide technical guidance on this. For the features discussed, I recommend we consider scalability and maintainability from the start.",
+                    "delay": 3.0,
+                },
+                {
+                    "agent": "PythonDeveloper",
+                    "response": "I have some implementation questions about what you've outlined. What's the priority order and any specific technical constraints?",
+                    "delay": 4.0,
+                },
+            ]
+
+            # Send responses from each agent with realistic delays
+            for agent_data in agent_responses:
+                await asyncio.sleep(agent_data["delay"])
+
+                response_message = ConversationMessage(
+                    id=f"{agent_data['agent'].lower()}_{datetime.now().timestamp()}",
+                    session_id=session_id,
+                    role="assistant",
+                    content=agent_data["response"],
+                    timestamp=datetime.now().strftime("%H:%M:%S"),
+                    message_type=MessageType.AGENT_RESPONSE.value,
+                    agent_name=agent_data["agent"],
+                )
+
+                # Emit the response
+                self.message_received.emit(response_message)
+
+        except Exception as e:
+            logger.error(f"Error in _send_message_to_session: {e}")
+            raise
+
     def send_message_to_session(self, message_data: dict):
         """Send message to session service"""
         # Extract session_id for future use

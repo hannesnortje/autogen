@@ -379,7 +379,9 @@ class AutoGenMainWindow(QMainWindow):
         left_widget.addTab(self.session_manager, "Sessions")
 
         # Middle - Conversation (using enhanced conversation widget with services)
-        self.conversation_widget = EnhancedConversationWidget(self.conversation_service)
+        self.conversation_widget = EnhancedConversationWidget(
+            self.conversation_service, use_mcp=True
+        )
 
         # Right side - Notifications panel
         # (Will be initialized after services are set up)
@@ -479,16 +481,44 @@ class AutoGenMainWindow(QMainWindow):
 
         # Connect session manager signals to conversation widget
         if hasattr(self, "session_manager"):
+            logger.info("Connecting session manager signals to conversation widget")
             self.session_manager.session_started.connect(
-                lambda config: self.conversation_widget.set_session_id(
-                    config.get("session_id")
-                )
+                lambda config: self._on_session_started_for_conversation(config)
             )
             self.session_manager.session_ended.connect(
-                lambda session_id: self.conversation_widget.set_session_id(None)
+                lambda session_id: self._on_session_ended_for_conversation(session_id)
+            )
+        else:
+            logger.warning(
+                "No session_manager found - conversation widget won't receive session updates!"
             )
 
         logger.info("Real-time service connections established")
+
+    def _on_session_started_for_conversation(self, config: dict):
+        """Handle session started signal for conversation widget"""
+        session_id = config.get("session_id") or config.get("name")
+        logger.info(f"Main Window: Session started callback - session_id: {session_id}")
+        logger.info(f"Main Window: Full config: {config}")
+        if session_id:
+            logger.info(
+                f"Main Window: Setting conversation widget session_id to: {session_id}"
+            )
+            self.conversation_widget.set_session_id(session_id)
+
+            # CRITICAL FIX: Start the conversation in the service
+            logger.info(
+                f"Main Window: Starting conversation service for session: {session_id}"
+            )
+            self.conversation_service.start_conversation(session_id, config)
+        else:
+            logger.warning("Session started but no session_id or name in config!")
+            logger.warning(f"Config keys: {list(config.keys())}")
+
+    def _on_session_ended_for_conversation(self, session_id: str):
+        """Handle session ended signal for conversation widget"""
+        logger.info(f"Main Window: Session ended callback - session_id: {session_id}")
+        self.conversation_widget.set_session_id(None)
 
     def on_session_updated(self, session_id: str, update_data: dict):
         """Handle session update events"""

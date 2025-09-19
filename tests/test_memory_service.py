@@ -2,7 +2,6 @@ from autogen_mcp.memory import MemoryService
 
 
 def test_memory_write_and_list(monkeypatch):
-
     svc = MemoryService(collection="mem_test", summary_threshold=3)
     svc.ensure_collection()
 

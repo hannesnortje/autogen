@@ -4,6 +4,7 @@ Replaces the mock conversation widget with real session service integration
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Optional, List
 from PySide6.QtWidgets import (
     QWidget,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QCheckBox,
     QScrollArea,
+    QApplication,
 )
 from PySide6.QtGui import QFont, QTextCursor
 
@@ -171,20 +173,36 @@ class EnhancedConversationWidget(QWidget):
         """
         )
 
-    def set_session(self, session_id: str):
+    def set_session_id(self, session_id: str):
         """Set the current conversation session"""
+        logger.info(
+            f"Enhanced Conversation Widget: set_session_id called with: {session_id}"
+        )
         self.current_session_id = session_id
-        self.conversation_display.clear()
-        self.status_label.setText(f"Connected to session: {session_id[:8]}...")
+        if session_id:
+            self.conversation_display.clear()
+            self.status_label.setText(f"Connected to session: {session_id[:8]}...")
+            logger.info(f"Session connected: {session_id}")
 
-        # Load existing conversation
-        try:
-            messages = self.conversation_service.get_conversation_history(session_id)
-            for message in messages:
-                self.display_message(message)
-        except Exception as e:
-            logger.error(f"Failed to load conversation history: {e}")
-            self.status_label.setText("Failed to load conversation history")
+            # Load existing conversation
+            try:
+                messages = self.conversation_service.get_conversation_history(
+                    session_id
+                )
+                for message in messages:
+                    self.display_message(message)
+                logger.info(f"Loaded {len(messages)} messages for session {session_id}")
+            except Exception as e:
+                logger.error(f"Failed to load conversation history: {e}")
+                self.status_label.setText("Failed to load conversation history")
+        else:
+            self.conversation_display.clear()
+            self.status_label.setText("No active session")
+            logger.info("Session disconnected")
+
+    def set_session(self, session_id: str):
+        """Alias for backward compatibility"""
+        self.set_session_id(session_id)
 
     def update_available_agents(self, agents: List[str]):
         """Update the list of available agents for targeting"""
@@ -313,22 +331,173 @@ class EnhancedConversationWidget(QWidget):
 
     def send_message(self):
         """Send a user message"""
+        # BASIC DEBUG - verify method is called
+        with open("/tmp/autogen_debug.txt", "a") as f:
+            f.write(
+                f"[{datetime.now()}] SEND_MESSAGE CALLED - session_id: {self.current_session_id}\n"
+            )
+
+        # DIRECT SESSION DETECTION WITH FILE LOGGING
         if not self.current_session_id:
+            self.status_label.setText("🔍 Directly checking for active session...")
+
+            debug_file = "/tmp/autogen_debug.txt"
+            with open(debug_file, "a") as f:
+                f.write("=" * 60 + "\n")
+                f.write(
+                    f"[{datetime.now()}] ENHANCED CONVERSATION: Direct session detection starting\n"
+                )
+
+            # Get the main window directly
+            try:
+                app = QApplication.instance()
+                main_window = None
+
+                with open(debug_file, "a") as f:
+                    f.write(f"Found {len(app.topLevelWidgets())} top-level widgets\n")
+
+                for i, widget in enumerate(app.topLevelWidgets()):
+                    has_session_manager = hasattr(widget, "session_manager")
+                    with open(debug_file, "a") as f:
+                        f.write(
+                            f"Widget {i}: {type(widget).__name__} - has session_manager: {has_session_manager}\n"
+                        )
+
+                    if has_session_manager:
+                        main_window = widget
+                        break
+
+                if main_window and hasattr(main_window, "session_manager"):
+                    session_manager = main_window.session_manager
+
+                    with open(debug_file, "a") as f:
+                        f.write(
+                            f"SESSION MANAGER FOUND: {type(session_manager).__name__}\n"
+                        )
+                        f.write(
+                            f"Has current_session attr: {hasattr(session_manager, 'current_session')}\n"
+                        )
+
+                    if hasattr(session_manager, "current_session"):
+                        current_session = session_manager.current_session
+
+                        with open(debug_file, "a") as f:
+                            f.write(f"current_session value: {current_session}\n")
+                            f.write(f"current_session type: {type(current_session)}\n")
+
+                        if current_session:
+                            # Extract session ID
+                            session_id = None
+                            if isinstance(current_session, dict):
+                                with open(debug_file, "a") as f:
+                                    f.write(
+                                        f"Dict keys: {list(current_session.keys())}\n"
+                                    )
+
+                                session_id = (
+                                    current_session.get("session_id")
+                                    or current_session.get("name")
+                                    or current_session.get("id")
+                                )
+
+                                with open(debug_file, "a") as f:
+                                    f.write(f"Extracted session_id: {session_id}\n")
+
+                            elif isinstance(current_session, str):
+                                session_id = current_session
+                                with open(debug_file, "a") as f:
+                                    f.write(f"String session_id: {session_id}\n")
+
+                            if session_id:
+                                self.current_session_id = session_id
+                                self.status_label.setText(
+                                    f"✅ Direct connection: {session_id}"
+                                )
+                                with open(debug_file, "a") as f:
+                                    f.write(
+                                        f"SUCCESS: Connected to session: {session_id}\n"
+                                    )
+                                    f.write("=" * 60 + "\n")
+                            else:
+                                self.status_label.setText(
+                                    "❌ No session ID in current_session"
+                                )
+                                with open(debug_file, "a") as f:
+                                    f.write("FAILED: No session ID found\n")
+                                    f.write("=" * 60 + "\n")
+                        else:
+                            self.status_label.setText("❌ current_session is None")
+                            with open(debug_file, "a") as f:
+                                f.write("FAILED: current_session is None\n")
+                                f.write("=" * 60 + "\n")
+                    else:
+                        self.status_label.setText("❌ No current_session attribute")
+                        with open(debug_file, "a") as f:
+                            f.write("FAILED: No current_session attribute\n")
+                            f.write("=" * 60 + "\n")
+                else:
+                    self.status_label.setText("❌ No main window with session_manager")
+                    with open(debug_file, "a") as f:
+                        f.write("FAILED: No main window with session_manager found\n")
+                        f.write("=" * 60 + "\n")
+
+            except Exception as e:
+                error_msg = f"DIRECT: Error finding session: {str(e)}"
+                self.status_label.setText("❌ Direct search failed")
+                with open(debug_file, "a") as f:
+                    f.write(f"ERROR: {error_msg}\n")
+                    f.write("=" * 60 + "\n")
+
+        # DEBUG: Session validation
+        with open("/tmp/autogen_debug.txt", "a") as f:
+            f.write(
+                f"[{datetime.now()}] Session ID check - current_session_id: '{self.current_session_id}'\n"
+            )
+
+        if not self.current_session_id:
+            with open("/tmp/autogen_debug.txt", "a") as f:
+                f.write(
+                    f"[{datetime.now()}] ERROR: No session ID - showing warning dialog\n"
+                )
             QMessageBox.warning(
                 self, "No Session", "Please select a conversation session first."
             )
             return
 
         message_text = self.message_input.toPlainText().strip()
+        with open("/tmp/autogen_debug.txt", "a") as f:
+            f.write(
+                f"[{datetime.now()}] Message text: '{message_text}' (length: {len(message_text)})\n"
+            )
+
         if not message_text:
+            with open("/tmp/autogen_debug.txt", "a") as f:
+                f.write(f"[{datetime.now()}] ERROR: Empty message text - returning\n")
             return
 
         try:
+            # Clear any previous error messages
+            self.status_label.setText("📤 Sending message...")
+
             selected_agents = self.get_selected_agents()
+            with open("/tmp/autogen_debug.txt", "a") as f:
+                f.write(f"[{datetime.now()}] Selected agents: {selected_agents}\n")
+                f.write(
+                    f"[{datetime.now()}] MCP integration enabled: {self.use_mcp_integration}\n"
+                )
+
+            logger.info(f"Sending message with session_id: {self.current_session_id}")
+            logger.info(f"Selected agents: {selected_agents}")
+            logger.info(f"Message: {message_text[:50]}...")
 
             if selected_agents:
+                with open("/tmp/autogen_debug.txt", "a") as f:
+                    f.write(
+                        f"[{datetime.now()}] TARGETED MESSAGE FLOW - creating targeted message\n"
+                    )
+
                 # Send targeted message to specific agents
-                message = self.conversation_service.create_targeted_user_message(
+                self.conversation_service.create_targeted_user_message(
                     session_id=self.current_session_id,
                     content=message_text,
                     target_agents=selected_agents,
@@ -336,57 +505,124 @@ class EnhancedConversationWidget(QWidget):
 
                 # Use MCP integration if enabled
                 if self.use_mcp_integration:
+                    with open("/tmp/autogen_debug.txt", "a") as f:
+                        f.write(f"[{datetime.now()}] Using MCP integration\n")
+                    logger.info("Using MCP integration...")
+                    self.status_label.setText("📡 Sending via MCP...")
                     success = self.conversation_service.send_message_via_mcp(
                         self.current_session_id, message_text, selected_agents, "user"
                     )
                     if not success:
-                        msg = "MCP send failed, using local"
-                        self.status_label.setText(msg)
-                        # Fall back to local sending
-                        self.conversation_service.send_targeted_message(
+                        with open("/tmp/autogen_debug.txt", "a") as f:
+                            f.write(
+                                f"[{datetime.now()}] MCP send failed, using local\n"
+                            )
+                        logger.warning("MCP send failed, using local")
+                        self.status_label.setText("⚠️ MCP failed, using local...")
+                        self.conversation_service.send_targeted_message_local(
                             self.current_session_id, message_text, selected_agents
                         )
+                    else:
+                        logger.info("MCP send successful")
+                        self.status_label.setText("✅ Message sent via MCP")
                 else:
-                    self.conversation_service.send_targeted_message(
+                    logger.info("Using local messaging...")
+                    self.status_label.setText("📨 Sending locally...")
+                    self.conversation_service.send_targeted_message_local(
                         self.current_session_id, message_text, selected_agents
                     )
+                    self.status_label.setText("✅ Message sent locally")
             else:
-                # Send to session (all agents)
-                message = self.conversation_service.create_user_message(
-                    session_id=self.current_session_id, content=message_text
-                )
-
-                # Use MCP integration if enabled
-                if self.use_mcp_integration:
-                    success = self.conversation_service.send_message_via_mcp(
-                        self.current_session_id, message_text, None, "user"
+                with open("/tmp/autogen_debug.txt", "a") as f:
+                    f.write(
+                        f"[{datetime.now()}] ALL AGENTS MESSAGE FLOW - sending to all agents\n"
                     )
-                    if not success:
-                        msg = "MCP send failed, using local"
-                        self.status_label.setText(msg)
-                        # Fall back to local sending
-                        self.conversation_service.send_message(
-                            self.current_session_id, message_text
-                        )
-                else:
+                logger.info("Sending to all agents...")
+                self.status_label.setText("📨 Sending to all agents...")
+
+                # Add debugging around the conversation service call
+                with open("/tmp/autogen_debug.txt", "a") as f:
+                    f.write(
+                        f"[{datetime.now()}] About to call conversation_service.send_message\n"
+                    )
+
+                try:
+                    # Send message to all agents
                     self.conversation_service.send_message(
                         self.current_session_id, message_text
                     )
+                    with open("/tmp/autogen_debug.txt", "a") as f:
+                        f.write(
+                            f"[{datetime.now()}] conversation_service.send_message completed successfully\n"
+                        )
+                except Exception as service_error:
+                    with open("/tmp/autogen_debug.txt", "a") as f:
+                        f.write(
+                            f"[{datetime.now()}] conversation_service.send_message FAILED: {str(service_error)}\n"
+                        )
+                    raise  # Re-raise the exception to be caught by outer try-catch
 
-            # Display the message immediately
-            self.display_message(message)
+                with open("/tmp/autogen_debug.txt", "a") as f:
+                    f.write(
+                        f"[{datetime.now()}] Message sent to all agents - showing success\n"
+                    )
+                self.status_label.setText("✅ Message sent to all agents")
 
-            # Clear input
+            # Clear the input and show success
             self.message_input.clear()
-            if self.use_mcp_integration:
-                status_msg = "Message sent via MCP"
-            else:
-                status_msg = "Sending message..."
-            self.status_label.setText(status_msg)
+            logger.info("Message sent successfully, clearing input")
+
+            # Show success dialog
+            QMessageBox.information(
+                self,
+                "Message Sent",
+                f"Message sent successfully!\nSession: {self.current_session_id}\nAgents: {', '.join(selected_agents) if selected_agents else 'All agents'}",
+            )
+
+            # Force refresh conversation after a short delay
+            from PySide6.QtCore import QTimer
+
+            QTimer.singleShot(1000, self.refresh_conversation)
+
+        except Exception as e:
+            error_msg = f"Failed to send message: {str(e)}"
+            logger.error(error_msg)
+            self.status_label.setText(f"❌ Send failed: {str(e)[:30]}...")
+            QMessageBox.critical(self, "Send Failed", error_msg)
 
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             self.status_label.setText(f"Error: {str(e)}")
+
+    def refresh_conversation(self):
+        """Refresh the conversation display by reloading messages from the service"""
+        if not self.current_session_id:
+            return
+
+        try:
+            # Get the latest conversation history from the service
+            messages = self.conversation_service.get_conversation_history(
+                self.current_session_id
+            )
+
+            # Clear the current display
+            self.conversation_display.clear()
+
+            # Redisplay all messages
+            for message in messages:
+                self.display_message(message)
+
+            # Scroll to bottom to show latest messages
+            scrollbar = self.conversation_display.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+
+            logger.info(
+                f"Refreshed conversation for session {self.current_session_id} with {len(messages)} messages"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to refresh conversation: {e}")
+            self.status_label.setText(f"❌ Refresh failed: {str(e)[:30]}...")
 
     def clear_conversation(self):
         """Clear the conversation"""
@@ -402,8 +638,23 @@ class EnhancedConversationWidget(QWidget):
         )
 
         if reply == QMessageBox.Yes:
-            self.conversation_display.clear()
-            self.conversation_service.clear_conversation(self.current_session_id)
+            try:
+                self.status_label.setText("🗑️ Clearing conversation...")
+                self.conversation_display.clear()
+                self.conversation_service.clear_conversation(self.current_session_id)
+                self.status_label.setText("✅ Conversation cleared")
+
+                # Show success message
+                QMessageBox.information(
+                    self,
+                    "Conversation Cleared",
+                    "The conversation has been cleared successfully!",
+                )
+            except Exception as e:
+                error_msg = f"Failed to clear conversation: {str(e)}"
+                logger.error(error_msg)
+                self.status_label.setText("❌ Clear failed")
+                QMessageBox.critical(self, "Clear Failed", error_msg)
 
     def export_conversation(self):
         """Export conversation to file"""

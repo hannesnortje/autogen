@@ -6,8 +6,9 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch
 
 # Mock the services to avoid dependency on actual Qdrant and Gemini
-with patch("autogen_mcp.mcp_server.memory_service"), patch(
-    "autogen_mcp.mcp_server.gemini_client"
+with (
+    patch("autogen_mcp.mcp_server.memory_service"),
+    patch("autogen_mcp.mcp_server.gemini_client"),
 ):
     from autogen_mcp.mcp_server import app
 
@@ -126,10 +127,10 @@ def test_websocket_multiple_sessions():
     session1_id = "session-1"
     session2_id = "session-2"
 
-    with client.websocket_connect(
-        f"/ws/session/{session1_id}"
-    ) as ws1, client.websocket_connect(f"/ws/session/{session2_id}") as ws2:
-
+    with (
+        client.websocket_connect(f"/ws/session/{session1_id}") as ws1,
+        client.websocket_connect(f"/ws/session/{session2_id}") as ws2,
+    ):
         # Send different messages to each session
         ws1.send_text(json.dumps({"session": "1", "message": "hello from 1"}))
         ws2.send_text(json.dumps({"session": "2", "message": "hello from 2"}))
