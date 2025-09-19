@@ -98,17 +98,31 @@ class AutoGenLauncher:
         except Exception as e:
             self.logger.warning(f"Could not check Qdrant status: {e}")
 
-        # Start Qdrant via docker-compose
+        # Start Qdrant via docker-compose or start existing container
         self.logger.info("Starting Qdrant server...")
 
         try:
-            result = subprocess.run(
-                ["docker", "compose", "up", "-d", "qdrant"],
-                cwd=project_root,
+            # First try to start existing container
+            start_result = subprocess.run(
+                ["docker", "start", "autogen-qdrant"],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=10,
             )
+
+            if start_result.returncode == 0:
+                self.logger.info("✅ Started existing Qdrant container")
+                result = start_result
+            else:
+                # Container doesn't exist, create with docker-compose
+                self.logger.info("Creating new Qdrant container...")
+                result = subprocess.run(
+                    ["docker", "compose", "up", "-d", "qdrant"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
 
             if result.returncode == 0:
                 # Wait for Qdrant to be ready

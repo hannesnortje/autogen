@@ -17,7 +17,100 @@
     "auto_open_browser": false
   },
   "agents": {
-    "custom_agents": []
+    "custom_agents": [
+      {
+        "name": "ScrumMaster",
+        "description": "Facilitates scrum ceremonies and removes blockers for the team",
+        "role": "scrum_master",
+        "capabilities": {
+          "code_execution": false,
+          "function_calling": true,
+          "human_input": true,
+          "web_browsing": false,
+          "file_operations": true
+        },
+        "model": {
+          "name": "gemini-2.0-flash",
+          "temperature": 0.3,
+          "max_tokens": 2048,
+          "system_prompt": "You are a Scrum Master focused on facilitating agile processes, removing blockers, and ensuring smooth team collaboration. You excel at sprint planning, daily standups, and retrospectives."
+        },
+        "memory": {
+          "enabled": true,
+          "scope": "conversation",
+          "retrieval_limit": 15
+        }
+      },
+      {
+        "name": "ProductOwner",
+        "description": "Defines product vision, manages backlog, and sets priorities",
+        "role": "product_owner",
+        "capabilities": {
+          "code_execution": false,
+          "function_calling": true,
+          "human_input": true,
+          "web_browsing": true,
+          "file_operations": true
+        },
+        "model": {
+          "name": "gemini-2.0-flash",
+          "temperature": 0.4,
+          "max_tokens": 2048,
+          "system_prompt": "You are a Product Owner responsible for defining product vision, creating user stories, managing the product backlog, and ensuring the team builds the right features for users."
+        },
+        "memory": {
+          "enabled": true,
+          "scope": "conversation",
+          "retrieval_limit": 20
+        }
+      },
+      {
+        "name": "TechLead",
+        "description": "Provides technical architecture guidance and makes technical decisions",
+        "role": "tech_lead",
+        "capabilities": {
+          "code_execution": true,
+          "function_calling": true,
+          "human_input": true,
+          "web_browsing": true,
+          "file_operations": true
+        },
+        "model": {
+          "name": "gemini-2.0-flash",
+          "temperature": 0.2,
+          "max_tokens": 3072,
+          "system_prompt": "You are a Technical Lead responsible for system architecture, technical decisions, code quality, and providing technical guidance to the development team. You ensure scalable, maintainable solutions."
+        },
+        "memory": {
+          "enabled": true,
+          "scope": "conversation",
+          "retrieval_limit": 25
+        }
+      },
+      {
+        "name": "PythonDeveloper",
+        "description": "Specialized Python developer for implementation and deployment",
+        "role": "python_developer",
+        "capabilities": {
+          "code_execution": true,
+          "function_calling": true,
+          "human_input": false,
+          "web_browsing": true,
+          "file_operations": true
+        },
+        "model": {
+          "name": "gemini-2.0-flash",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "system_prompt": "You are a Python Developer expert in Python development, deployment, testing, and DevOps. You write clean, efficient, well-documented code and create robust deployment solutions."
+        },
+        "memory": {
+          "enabled": true,
+          "scope": "conversation",
+          "retrieval_limit": 30
+        }
+      }
+    ]
   },
   "integration_mode": "hybrid",
   "project_root": "/media/hannesn/storage/Code"
